@@ -30,6 +30,24 @@ export function PrimaryButton({ label, onPress, loading, disabled }: PrimaryButt
   );
 }
 
+type SecondaryButtonProps = {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+};
+
+export function SecondaryButton({ label, onPress, disabled }: SecondaryButtonProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.secondary, disabled && styles.disabled, pressed && !disabled && styles.pressed]}>
+      <Text style={styles.secondaryLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 type SocialButtonProps = {
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -88,6 +106,21 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  secondary: {
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: Colors.light.surface,
+    borderWidth: 1,
+    borderColor: Colors.light.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryLabel: {
+    color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 16,
+    letterSpacing: 0.3,
   },
   social: {
     height: 54,

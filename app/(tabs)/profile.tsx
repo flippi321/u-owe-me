@@ -6,14 +6,7 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowD
 
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
-
-const initialsFrom = (name: string) =>
-  name
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase())
-    .slice(0, 2)
-    .join('');
+import { initialsFrom } from '@/utils/format';
 
 export default function Profile() {
   const router = useRouter();
@@ -29,7 +22,7 @@ export default function Profile() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace('/');
+    router.replace('/login');
   };
 
   return (
@@ -85,7 +78,7 @@ export default function Profile() {
             style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
             accessibilityRole="button">
             <MaterialCommunityIcons name="logout" size={18} color={Colors.light.accent} />
-            <Text style={styles.signOutLabel}>{profile ? 'Sign out' : 'Back to landing'}</Text>
+            <Text style={styles.signOutLabel}>{profile ? 'Sign out' : 'Log in'}</Text>
           </Pressable>
         </View>
       </ScrollView>
