@@ -7,7 +7,7 @@ import type { Card, Suit } from '@/utils/blackjack';
 
 const CARD_WIDTH = 64;
 const CARD_HEIGHT = 92;
-const OVERLAP = 30;
+const CARD_GAP = 14;
 
 const SUIT_ICON: Record<Suit, keyof typeof MaterialCommunityIcons.glyphMap> = {
   hearts: 'cards-heart',
@@ -80,9 +80,7 @@ export function Hand({ cards, hideSecondCard }: HandProps) {
   return (
     <View style={styles.hand}>
       {cards.map((card, index) => (
-        <View key={`${card.rank}-${card.suit}-${index}`} style={index > 0 ? { marginLeft: -OVERLAP } : undefined}>
-          <PlayingCard card={card} faceDown={hideSecondCard && index === 1} />
-        </View>
+        <PlayingCard key={`${card.rank}-${card.suit}-${index}`} card={card} faceDown={hideSecondCard && index === 1} />
       ))}
     </View>
   );
@@ -92,6 +90,10 @@ const styles = StyleSheet.create({
   hand: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: CARD_GAP,
+    width: '100%',
   },
   card: {
     width: CARD_WIDTH,
