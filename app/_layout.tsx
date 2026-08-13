@@ -13,6 +13,8 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: Colors.light.background },
         }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Details' }} />
       </Stack>
       <StatusBar style="dark" />
