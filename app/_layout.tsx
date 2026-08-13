@@ -12,6 +12,7 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const initialize = useAuthStore((state) => state.initialize);
+  const session = useAuthStore((state) => state.session);
 
   useEffect(() => {
     initialize();
@@ -30,9 +31,20 @@ export default function RootLayout() {
           headerShown: false,
           contentStyle: { backgroundColor: Colors.light.background },
         }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
+        {/* Removing these screens from the navigator once signed in (rather
+        than just replace()-ing past them) is what stops the native
+        swipe-back gesture from ever being able to reveal login/register
+        again — there's nothing left in the stack to swipe back to. */}
+        <Stack.Protected guard={!session}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+        </Stack.Protected>
+
+        <Stack.Protected guard={!!session}>
+          <Stack.Screen name="(tabs)" />
+        </Stack.Protected>
+
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Details' }} />
       </Stack>
       <StatusBar style="dark" />

@@ -64,3 +64,18 @@ export async function fetchBalances(userId: string): Promise<{ data: Balances | 
 
   return { data: { owedToMe, iOwe, netBalance }, error: null };
 }
+
+// Marks every unsettled payment where `creditorId` fronted the money and
+// `debtorId` owes it back as settled. UI-only rounding (nearest ¥100) is
+// never applied here — this clears the exact underlying amounts.
+export async function settleUp(creditorId: string, debtorId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('payments')
+    .update({ is_settled: true, settled_at: new Date().toISOString() })
+    .eq('paid_by', creditorId)
+    .eq('owed_by', debtorId)
+    .eq('is_settled', false);
+
+  if (error) return { error: error.message };
+  return { error: null };
+}

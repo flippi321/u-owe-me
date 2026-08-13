@@ -6,7 +6,7 @@ export default function About() {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>About</Text>
-      <Text style={styles.note}>App info and copy (mock).</Text>
+      <Text style={styles.note}>Hasan is a broke ass n***a</Text>
     </SafeAreaView>
   );
 }
