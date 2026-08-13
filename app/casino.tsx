@@ -209,6 +209,20 @@ export default function Casino() {
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
               </Pressable>
+
+              <Pressable
+                onPress={() => router.push('/blackjack')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.gameRow, pressed && styles.gameRowPressed]}>
+                <View style={styles.gameIconWrap}>
+                  <MaterialCommunityIcons name="cards-playing-outline" size={22} color={Colors.light.accent} />
+                </View>
+                <View style={styles.gameRowText}>
+                  <Text style={styles.gameTitle}>Blackjack</Text>
+                  <Text style={styles.gameSubtitle}>Beat the dealer to 21 — ties go to the house</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
+              </Pressable>
             </>
           )}
         </View>

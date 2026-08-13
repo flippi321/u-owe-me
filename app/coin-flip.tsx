@@ -1,5 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useAudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -18,6 +20,10 @@ const REEL_DURATION_MS = 3200;
 export default function CoinFlip() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+
+  const reelLandPlayer = useAudioPlayer(require('@/assets/sounds/reel-land.wav'));
+  const winPlayer = useAudioPlayer(require('@/assets/sounds/win.wav'));
+  const losePlayer = useAudioPlayer(require('@/assets/sounds/lose.wav'));
 
   const [coinBalance, setCoinBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,10 +70,27 @@ export default function CoinFlip() {
     if (!hasLanded || !pendingResult || !user) return;
 
     setRevealedResult(pendingResult);
+    if (pendingResult.won) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      winPlayer.seekTo(0);
+      winPlayer.play();
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      losePlayer.seekTo(0);
+      losePlayer.play();
+    }
     loadBalance(user.id).then(() => setIsFlipping(false));
+    // winPlayer/losePlayer are stable player instances from useAudioPlayer —
+    // including them would retrigger this effect on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasLanded, pendingResult, user, loadBalance]);
 
-  const handleReelLanded = () => setHasLanded(true);
+  const handleReelLanded = () => {
+    setHasLanded(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    reelLandPlayer.seekTo(0);
+    reelLandPlayer.play();
+  };
 
   const handleFlip = async () => {
     if (!user || betAmount === null || guess === null) return;
@@ -77,6 +100,7 @@ export default function CoinFlip() {
       return;
     }
 
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsFlipping(true);
     setFlipError(null);
     setRevealedResult(null);
