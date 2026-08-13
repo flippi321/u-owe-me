@@ -77,13 +77,13 @@ export default function Statistics() {
             <>
               <View style={styles.panel}>
                 <Text style={styles.panelTitle}>Top G&apos;s</Text>
-                <Text style={styles.panelSubtitle}>Lent the most that&apos;s still unpaid back.</Text>
+                <Text style={styles.panelSubtitle}>Lent the most overall, paid back or not.</Text>
                 <BarChart entries={topLenders} barColor={Colors.light.sage} emptyLabel="Nobody has lent anything yet." />
               </View>
 
               <View style={styles.panel}>
                 <Text style={styles.panelTitle}>Bottom Dwellers</Text>
-                <Text style={styles.panelSubtitle}>Owe the most right now.</Text>
+                <Text style={styles.panelSubtitle}>Owe the most overall, paid back or not.</Text>
                 <BarChart
                   entries={bottomDwellers}
                   barColor={Colors.light.accent}

@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,12 +18,14 @@ import { BrandMark } from '@/components/brand-mark';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
 import { fetchBalances, settleUp, type BalanceEntry } from '@/utils/balances';
+import { fetchCoinBalance } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
 
 // Display-only rounding for the settle-up popup — never written back to the DB.
 const roundToNearestHundred = (amount: number) => Math.round(amount / 100) * 100;
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isWide = width >= 780;
   const contentWidth = Math.min(width - 32, 1120);
@@ -31,7 +34,14 @@ export default function HomeScreen() {
 
   const [owedTo, setOwedTo] = useState<BalanceEntry[]>([]);
   const [owed, setOwed] = useState<BalanceEntry[]>([]);
-  const [netBalance, setNetBalance] = useState(0);
+  const [interpersonalNetBalance, setInterpersonalNetBalance] = useState(0);
+  const [asahiFundBalance, setAsahiFundBalance] = useState(0);
+  // Coins bought (net of cash-outs) are yen you've handed to the Asahi Fund
+  // — a debt like any other, so it comes out of the overall Net Balance.
+  // Derived at render time (rather than combined once when fetched) so the
+  // two numbers can never drift out of sync if one of the two fetches below
+  // fails on a later refresh while the other succeeds.
+  const netBalance = interpersonalNetBalance - Math.max(asahiFundBalance, 0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,15 +51,18 @@ export default function HomeScreen() {
   const [settleError, setSettleError] = useState<string | null>(null);
 
   const loadBalances = useCallback(async (userId: string) => {
-    const result = await fetchBalances(userId);
-    if (result.error) {
-      setError(result.error);
-    } else if (result.data) {
-      setOwedTo(result.data.owedToMe);
-      setOwed(result.data.iOwe);
-      setNetBalance(result.data.netBalance);
+    const [balancesResult, coinResult] = await Promise.all([fetchBalances(userId), fetchCoinBalance(userId)]);
+
+    if (balancesResult.error) {
+      setError(balancesResult.error);
+    } else if (balancesResult.data) {
+      setOwedTo(balancesResult.data.owedToMe);
+      setOwed(balancesResult.data.iOwe);
+      setInterpersonalNetBalance(balancesResult.data.netBalance);
       setError(null);
     }
+
+    if (coinResult.data !== null) setAsahiFundBalance(coinResult.data);
   }, []);
 
   useEffect(() => {
@@ -179,10 +192,22 @@ export default function HomeScreen() {
 
                 <View style={[styles.listPanel, isWide && styles.flexList]}>
                   <Text style={styles.listTitle}>Owed</Text>
-                  {owed.length === 0 ? (
+                  {owed.length === 0 && asahiFundBalance <= 0 ? (
                     <Text style={styles.emptyNote}>You&apos;re all settled up.</Text>
                   ) : (
                     <View style={styles.listBody}>
+                      {asahiFundBalance > 0 ? (
+                        <Pressable
+                          onPress={() => router.push('/casino')}
+                          accessibilityRole="button"
+                          style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
+                          <View style={styles.rowLeft}>
+                            <Text style={styles.rowName}>Asahi Fund</Text>
+                            <Text style={styles.rowNote}>UOME Coins bought</Text>
+                          </View>
+                          <Text style={styles.rowAmount}>{formatCurrency(asahiFundBalance)}</Text>
+                        </Pressable>
+                      ) : null}
                       {owed.map((entry) => (
                         <View key={entry.profile.id} style={styles.row}>
                           <View style={styles.rowLeft}>

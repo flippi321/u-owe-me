@@ -7,12 +7,12 @@ export type LeaderboardEntry = {
 };
 
 export type Leaderboard = {
-  topLenders: LeaderboardEntry[]; // most currently owed to them by others
-  bottomDwellers: LeaderboardEntry[]; // most they currently owe to others
+  topLenders: LeaderboardEntry[]; // most lent to others overall, paid back or not
+  bottomDwellers: LeaderboardEntry[]; // most owed to others overall, paid back or not
 };
 
 export async function fetchLeaderboard(): Promise<{ data: Leaderboard | null; error: string | null }> {
-  const { data, error } = await supabase.from('payments').select('amount, owed_by, paid_by').eq('is_settled', false);
+  const { data, error } = await supabase.from('payments').select('amount, owed_by, paid_by');
   if (error) return { data: null, error: error.message };
 
   const lentTotals = new Map<string, number>();

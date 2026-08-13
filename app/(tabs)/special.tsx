@@ -26,7 +26,7 @@ export default function Special() {
             <SecondaryButton label="No" onPress={() => router.replace('/(tabs)')} />
           </View>
           <View style={styles.actionButton}>
-            <PrimaryButton label="Yes" onPress={() => router.push('/haram')} />
+            <PrimaryButton label="Yes" onPress={() => router.push('/casino')} />
           </View>
         </View>
       </View>

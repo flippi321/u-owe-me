@@ -4,7 +4,7 @@ import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
 
-export default function Haram() {
+export default function AsahiWheel() {
   const router = useRouter();
 
   return (
@@ -19,7 +19,8 @@ export default function Haram() {
       </Pressable>
 
       <View style={styles.container}>
-        <Text style={styles.title}>Haram</Text>
+        <Text style={styles.title}>Asahi Wheel</Text>
+        <Text style={styles.caption}>Coming soon.</Text>
       </View>
     </SafeAreaView>
   );
@@ -46,10 +47,15 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
   title: {
     fontFamily: Fonts.serif,
     fontSize: 20,
     color: Colors.light.text,
+  },
+  caption: {
+    color: Colors.light.textMuted,
+    fontSize: 14,
   },
 });
