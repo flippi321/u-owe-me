@@ -7,15 +7,15 @@ import { PrimaryButton } from '@/components/auth/buttons';
 import { SlotReel } from '@/components/casino/reel';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
-import { ASAHI_WHEEL_VALUES, playAsahiWheel, type AsahiWheelResult } from '@/utils/asahi-wheel';
+import { COIN_FLIP_SIDES, playCoinFlip, type CoinFlipResult, type CoinFlipSide } from '@/utils/coin-flip';
 import { fetchCoinBalance } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
 
-const REEL_ROTATIONS = [3, 4, 5];
-const REEL_DURATIONS = [1200, 1850, 2500];
 const BET_AMOUNTS = [100, 250, 500];
+const REEL_ROTATIONS = 12;
+const REEL_DURATION_MS = 3200;
 
-export default function AsahiWheel() {
+export default function CoinFlip() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
 
@@ -24,12 +24,13 @@ export default function AsahiWheel() {
   const [error, setError] = useState<string | null>(null);
 
   const [betAmount, setBetAmount] = useState<number | null>(null);
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [spinError, setSpinError] = useState<string | null>(null);
+  const [guess, setGuess] = useState<CoinFlipSide | null>(null);
+  const [isFlipping, setIsFlipping] = useState(false);
+  const [flipError, setFlipError] = useState<string | null>(null);
   const [spinToken, setSpinToken] = useState(0);
-  const [pendingResult, setPendingResult] = useState<AsahiWheelResult | null>(null);
-  const [landedCount, setLandedCount] = useState(0);
-  const [revealedResult, setRevealedResult] = useState<AsahiWheelResult | null>(null);
+  const [pendingResult, setPendingResult] = useState<CoinFlipResult | null>(null);
+  const [hasLanded, setHasLanded] = useState(false);
+  const [revealedResult, setRevealedResult] = useState<CoinFlipResult | null>(null);
 
   const loadBalance = useCallback(async (userId: string) => {
     const result = await fetchCoinBalance(userId);
@@ -60,40 +61,40 @@ export default function AsahiWheel() {
   }, [user, loadBalance]);
 
   useEffect(() => {
-    if (landedCount < 3 || !pendingResult || !user) return;
+    if (!hasLanded || !pendingResult || !user) return;
 
     setRevealedResult(pendingResult);
-    loadBalance(user.id).then(() => setIsSpinning(false));
-  }, [landedCount, pendingResult, user, loadBalance]);
+    loadBalance(user.id).then(() => setIsFlipping(false));
+  }, [hasLanded, pendingResult, user, loadBalance]);
 
-  const handleReelLanded = () => setLandedCount((count) => count + 1);
+  const handleReelLanded = () => setHasLanded(true);
 
-  const handleSpin = async () => {
-    if (!user || betAmount === null) return;
+  const handleFlip = async () => {
+    if (!user || betAmount === null || guess === null) return;
 
     if (betAmount > coinBalance) {
-      setSpinError("You don't have enough UOME Coins for that bet.");
+      setFlipError("You don't have enough UOME Coins for that bet.");
       return;
     }
 
-    setIsSpinning(true);
-    setSpinError(null);
+    setIsFlipping(true);
+    setFlipError(null);
     setRevealedResult(null);
 
-    const result = await playAsahiWheel(user.id, betAmount);
+    const result = await playCoinFlip(user.id, betAmount, guess);
 
     if (result.error) {
-      setIsSpinning(false);
-      setSpinError(result.error);
+      setIsFlipping(false);
+      setFlipError(result.error);
       return;
     }
 
     setPendingResult(result.data);
-    setLandedCount(0);
+    setHasLanded(false);
     setSpinToken((token) => token + 1);
   };
 
-  const isDisabled = isSpinning || isLoading || !!error || !user;
+  const isDisabled = isFlipping || isLoading || !!error || !user;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -108,7 +109,7 @@ export default function AsahiWheel() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-          <Text style={styles.title}>Asahi Wheel</Text>
+          <Text style={styles.title}>English or Spanish</Text>
 
           {!user ? (
             <View style={[styles.panel, styles.panelCentered]}>
@@ -131,7 +132,7 @@ export default function AsahiWheel() {
 
               <View style={styles.panel}>
                 <Text style={styles.betLabel}>Bet</Text>
-                <View style={styles.betOptionsRow}>
+                <View style={styles.optionsRow}>
                   {BET_AMOUNTS.map((amount) => {
                     const isSelected = betAmount === amount;
                     return (
@@ -142,12 +143,12 @@ export default function AsahiWheel() {
                         accessibilityRole="button"
                         accessibilityState={{ selected: isSelected }}
                         style={({ pressed }) => [
-                          styles.betOption,
-                          isSelected && styles.betOptionSelected,
-                          pressed && !isDisabled && styles.betOptionPressed,
-                          isDisabled && styles.betOptionDisabled,
+                          styles.option,
+                          isSelected && styles.optionSelected,
+                          pressed && !isDisabled && styles.optionPressed,
+                          isDisabled && styles.optionDisabled,
                         ]}>
-                        <Text style={[styles.betOptionLabel, isSelected && styles.betOptionLabelSelected]}>
+                        <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
                           {formatCurrency(amount)}
                         </Text>
                       </Pressable>
@@ -156,50 +157,59 @@ export default function AsahiWheel() {
                 </View>
               </View>
 
-              <View style={styles.reelsPanel}>
-                <View style={styles.reelsRow}>
-                  <SlotReel
-                    values={ASAHI_WHEEL_VALUES}
-                    targetValue={pendingResult?.reels[0] ?? null}
-                    spinToken={spinToken}
-                    rotations={REEL_ROTATIONS[0]}
-                    durationMs={REEL_DURATIONS[0]}
-                    onLanded={handleReelLanded}
-                  />
-                  <SlotReel
-                    values={ASAHI_WHEEL_VALUES}
-                    targetValue={pendingResult?.reels[1] ?? null}
-                    spinToken={spinToken}
-                    rotations={REEL_ROTATIONS[1]}
-                    durationMs={REEL_DURATIONS[1]}
-                    onLanded={handleReelLanded}
-                  />
-                  <SlotReel
-                    values={ASAHI_WHEEL_VALUES}
-                    targetValue={pendingResult?.reels[2] ?? null}
-                    spinToken={spinToken}
-                    rotations={REEL_ROTATIONS[2]}
-                    durationMs={REEL_DURATIONS[2]}
-                    onLanded={handleReelLanded}
-                  />
+              <View style={styles.panel}>
+                <Text style={styles.betLabel}>Call it</Text>
+                <View style={styles.optionsRow}>
+                  {COIN_FLIP_SIDES.map((side) => {
+                    const isSelected = guess === side;
+                    return (
+                      <Pressable
+                        key={side}
+                        onPress={() => setGuess(side)}
+                        disabled={isDisabled}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        style={({ pressed }) => [
+                          styles.option,
+                          isSelected && styles.optionSelected,
+                          pressed && !isDisabled && styles.optionPressed,
+                          isDisabled && styles.optionDisabled,
+                        ]}>
+                        <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>{side}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               </View>
 
-              {spinError ? <Text style={styles.errorText}>{spinError}</Text> : null}
+              <View style={styles.reelsPanel}>
+                <SlotReel
+                  values={COIN_FLIP_SIDES}
+                  targetValue={pendingResult?.outcome ?? null}
+                  spinToken={spinToken}
+                  rotations={REEL_ROTATIONS}
+                  durationMs={REEL_DURATION_MS}
+                  onLanded={handleReelLanded}
+                  width={220}
+                  fontSize={24}
+                />
+              </View>
+
+              {flipError ? <Text style={styles.errorText}>{flipError}</Text> : null}
 
               <PrimaryButton
-                label="Spin"
-                onPress={handleSpin}
-                loading={isSpinning}
-                disabled={isDisabled || betAmount === null}
+                label="Flip"
+                onPress={handleFlip}
+                loading={isFlipping}
+                disabled={isDisabled || betAmount === null || guess === null}
               />
 
               {revealedResult ? (
                 <View style={[styles.panel, styles.panelCentered]}>
-                  <Text style={revealedResult.multiplier > 0 ? styles.resultWin : styles.resultLose}>
-                    {revealedResult.multiplier > 0
-                      ? `You won ${formatCurrency(revealedResult.payout)}! (×${revealedResult.multiplier})`
-                      : `You lost ${formatCurrency(revealedResult.betAmount)}.`}
+                  <Text style={revealedResult.won ? styles.resultWin : styles.resultLose}>
+                    {revealedResult.won
+                      ? `${revealedResult.outcome}! You won ${formatCurrency(revealedResult.payout)}.`
+                      : `${revealedResult.outcome}! You lost ${formatCurrency(revealedResult.betAmount)}.`}
                   </Text>
                   <Text style={styles.resultNet}>
                     {formatCurrency(revealedResult.net, { signDisplay: 'always' })}
@@ -294,11 +304,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 10,
   },
-  betOptionsRow: {
+  optionsRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  betOption: {
+  option: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -308,22 +318,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.line,
   },
-  betOptionSelected: {
+  optionSelected: {
     backgroundColor: Colors.light.accent,
     borderColor: Colors.light.accent,
   },
-  betOptionPressed: {
+  optionPressed: {
     opacity: 0.8,
   },
-  betOptionDisabled: {
+  optionDisabled: {
     opacity: 0.5,
   },
-  betOptionLabel: {
+  optionLabel: {
     color: Colors.light.text,
     fontFamily: Fonts.serif,
     fontSize: 16,
   },
-  betOptionLabelSelected: {
+  optionLabelSelected: {
     color: Colors.light.surface,
   },
   reelsPanel: {
@@ -333,11 +343,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.line,
     alignItems: 'center',
-  },
-  reelsRow: {
-    flexDirection: 'row',
-    gap: 14,
-    justifyContent: 'center',
   },
   resultWin: {
     color: Colors.light.sage,

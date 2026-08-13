@@ -2,33 +2,44 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
-import { ASAHI_WHEEL_VALUES } from '@/utils/asahi-wheel';
 
 const ROW_HEIGHT = 64;
 const VISIBLE_ROWS = 3;
 
-type SlotReelProps = {
-  targetValue: number | null;
+type SlotReelProps<T> = {
+  values: readonly T[];
+  targetValue: T | null;
   spinToken: number; // bump to trigger a new spin — targetValue alone can repeat between spins
   rotations: number;
   durationMs: number;
   onLanded?: () => void;
+  width?: number;
+  fontSize?: number;
 };
 
-export function SlotReel({ targetValue, spinToken, rotations, durationMs, onLanded }: SlotReelProps) {
+export function SlotReel<T extends string | number>({
+  values,
+  targetValue,
+  spinToken,
+  rotations,
+  durationMs,
+  onLanded,
+  width = 72,
+  fontSize = 30,
+}: SlotReelProps<T>) {
   const translateY = useRef(new Animated.Value(0)).current;
 
   const { strip, targetStripIndex } = useMemo(() => {
-    const n = ASAHI_WHEEL_VALUES.length;
-    const valueIndex = targetValue !== null ? Math.max(ASAHI_WHEEL_VALUES.indexOf(targetValue), 0) : 0;
+    const n = values.length;
+    const valueIndex = targetValue !== null ? Math.max(values.indexOf(targetValue), 0) : 0;
     const index = rotations * n + valueIndex;
     // +1 extra row so the bottom window row is never blank at rest.
     const length = index + 2;
     return {
-      strip: Array.from({ length }, (_, k) => ASAHI_WHEEL_VALUES[k % n]),
+      strip: Array.from({ length }, (_, k) => values[k % n]),
       targetStripIndex: index,
     };
-  }, [targetValue, rotations]);
+  }, [values, targetValue, rotations]);
 
   useEffect(() => {
     if (spinToken === 0 || targetValue === null) return;
@@ -48,11 +59,13 @@ export function SlotReel({ targetValue, spinToken, rotations, durationMs, onLand
   }, [spinToken]);
 
   return (
-    <View style={styles.window}>
+    <View style={[styles.window, { width, height: ROW_HEIGHT * VISIBLE_ROWS }]}>
       <Animated.View style={{ transform: [{ translateY }] }}>
         {strip.map((value, index) => (
           <View key={index} style={styles.row}>
-            <Text style={styles.value}>{value}</Text>
+            <Text style={[styles.value, { fontSize }]} numberOfLines={1} adjustsFontSizeToFit>
+              {String(value)}
+            </Text>
           </View>
         ))}
       </Animated.View>
@@ -62,8 +75,6 @@ export function SlotReel({ targetValue, spinToken, rotations, durationMs, onLand
 
 const styles = StyleSheet.create({
   window: {
-    width: 72,
-    height: ROW_HEIGHT * VISIBLE_ROWS,
     overflow: 'hidden',
     borderRadius: 16,
     backgroundColor: Colors.light.surfaceAlt,
@@ -74,10 +85,10 @@ const styles = StyleSheet.create({
     height: ROW_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   value: {
     fontFamily: Fonts.serif,
-    fontSize: 30,
     color: Colors.light.text,
   },
 });

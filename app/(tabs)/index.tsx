@@ -38,13 +38,15 @@ export default function HomeScreen() {
   const [interpersonalNetBalance, setInterpersonalNetBalance] = useState(0);
   const [asahiFundOwed, setAsahiFundOwed] = useState(0);
   // Coins bought net of cash-outs — yen you've handed to the Asahi Fund,
-  // a debt like any other, so it comes out of the overall Net Balance. This
+  // a debt like any other, so it comes out of the overall Net Balance.
+  // asahiFundOwed is already signed (positive = you owe the house, negative
+  // = the house owes you), so subtracting it handles both directions. This
   // deliberately ignores game wins/losses (see fetchCoinsOwed): what you owe
   // only moves on an actual buy-in or cash-out, not on how a game goes.
   // Derived at render time (rather than combined once when fetched) so the
   // two numbers can never drift out of sync if one of the two fetches below
   // fails on a later refresh while the other succeeds.
-  const netBalance = interpersonalNetBalance - Math.max(asahiFundOwed, 0);
+  const netBalance = interpersonalNetBalance - asahiFundOwed;
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,10 +187,22 @@ export default function HomeScreen() {
                 <View style={[styles.listsWrap, isWide && styles.listsWrapWide]}>
                   <View style={[styles.listPanel, isWide && styles.flexList]}>
                     <Text style={styles.listTitle}>Owed to</Text>
-                    {owedTo.length === 0 ? (
+                    {owedTo.length === 0 && asahiFundOwed >= 0 ? (
                       <Text style={styles.emptyNote}>Nobody owes you anything right now.</Text>
                     ) : (
                       <View style={styles.listBody}>
+                        {asahiFundOwed < 0 ? (
+                          <Pressable
+                            onPress={() => router.push('/casino')}
+                            accessibilityRole="button"
+                            style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
+                            <View style={styles.rowLeft}>
+                              <Text style={styles.rowName}>Asahi Fund</Text>
+                              <Text style={styles.rowNote}>UOME Coins cashed out</Text>
+                            </View>
+                            <Text style={styles.rowAmount}>{formatCurrency(-asahiFundOwed)}</Text>
+                          </Pressable>
+                        ) : null}
                         {owedTo.map((entry) => (
                           <Pressable
                             key={entry.profile.id}

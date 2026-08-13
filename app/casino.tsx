@@ -181,6 +181,20 @@ export default function Casino() {
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
               </Pressable>
+
+              <Pressable
+                onPress={() => router.push('/coin-flip')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.gameRow, pressed && styles.gameRowPressed]}>
+                <View style={styles.gameIconWrap}>
+                  <MaterialCommunityIcons name="circle-half-full" size={22} color={Colors.light.accent} />
+                </View>
+                <View style={styles.gameRowText}>
+                  <Text style={styles.gameTitle}>English or Spanish</Text>
+                  <Text style={styles.gameSubtitle}>Call it — win 1.9x, or lose it all</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
+              </Pressable>
             </>
           )}
         </View>
