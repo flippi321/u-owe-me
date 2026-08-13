@@ -83,24 +83,23 @@ export const useAuthStore = create<AuthState>()((set) => ({
     if (data.session) {
       const { data: profile } = await fetchProfile(data.session.user.id);
       set({ profile });
-      writeCache(data.session.user, profile);
+      await writeCache(data.session.user, profile);
     } else {
       set({ profile: null });
-      writeCache(null, null);
+      await writeCache(null, null);
     }
 
     if (!listenerAttached) {
       listenerAttached = true;
-      supabase.auth.onAuthStateChange((_event, newSession) => {
+      supabase.auth.onAuthStateChange(async (_event, newSession) => {
         set({ session: newSession, user: newSession?.user ?? null });
         if (newSession) {
-          fetchProfile(newSession.user.id).then(({ data: profile }) => {
-            set({ profile });
-            writeCache(newSession.user, profile);
-          });
+          const { data: profile } = await fetchProfile(newSession.user.id);
+          set({ profile });
+          await writeCache(newSession.user, profile);
         } else {
           set({ profile: null });
-          writeCache(null, null);
+          await writeCache(null, null);
         }
       });
     }
@@ -118,7 +117,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
     const { data: profile } = await fetchProfile(data.user.id);
     set({ session: data.session, user: data.user, profile, isLoading: false, error: null });
-    writeCache(data.user, profile);
+    await writeCache(data.user, profile);
     return { error: null };
   },
 
@@ -136,13 +135,13 @@ export const useAuthStore = create<AuthState>()((set) => ({
     }
 
     set({ session: data.session, user: data.user, profile: data.profile, isLoading: false, error: null });
-    writeCache(data.user, data.profile);
+    await writeCache(data.user, data.profile);
     return { error: null };
   },
 
   signOut: async () => {
     await signOutUser();
     set({ session: null, user: null, profile: null });
-    writeCache(null, null);
+    await writeCache(null, null);
   },
 }));

@@ -18,6 +18,10 @@ function mapAuthError(error: unknown): string {
 
   if (/invalid login credentials/i.test(message)) return 'Incorrect email or password.';
   if (/user already registered/i.test(message)) return 'An account with this email already exists.';
+  // handle_new_user() raises a unique-violation inside the same transaction
+  // as the auth.users insert when the chosen username is taken, which GoTrue
+  // surfaces as this generic message rather than the underlying Postgres error.
+  if (/database error saving new user/i.test(message)) return 'That username is already taken.';
   if (message) return message;
   return 'Something went wrong. Please try again.';
 }
@@ -53,35 +57,26 @@ export async function signUpWithEmail(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: { data: { full_name: fullName, username } },
   });
 
   if (error || !data.user) {
     return { data: null, error: mapAuthError(error ?? new Error('Registration failed.')) };
   }
 
-  // The DB trigger auto-creates a profile with a username derived from the
-  // email. Overwrite it with the username the user actually chose — only
-  // possible once we have an authenticated session (RLS: auth.uid() = id).
+  // The DB trigger creates the profile row (with this username) as part of
+  // the same transaction as the auth.users insert, so it's guaranteed to
+  // exist by the time signUp() resolves.
   if (!data.session) {
     return { data: { user: data.user, session: null, profile: null }, error: null };
   }
 
-  const { data: profile, error: updateError } = await supabase
-    .from('profiles')
-    .update({ username })
-    .eq('id', data.user.id)
-    .select()
-    .single();
-
-  if (updateError || !profile) {
-    if ((updateError as { code?: string } | null)?.code === '23505') {
-      return { data: null, error: 'That username is already taken.' };
-    }
-    return { data: null, error: mapAuthError(updateError ?? new Error('Could not set username.')) };
+  const { data: profile, error: profileError } = await fetchProfile(data.user.id);
+  if (profileError || !profile) {
+    return { data: null, error: profileError ?? 'Could not load profile.' };
   }
 
-  return { data: { user: data.user, session: data.session, profile: profile as Profile }, error: null };
+  return { data: { user: data.user, session: data.session, profile }, error: null };
 }
 
 export async function signOutUser(): Promise<{ error: string | null }> {
