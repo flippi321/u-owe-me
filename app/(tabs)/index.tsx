@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   logoWrap: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
     paddingVertical: 10,
   },

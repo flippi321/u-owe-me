@@ -10,9 +10,7 @@ export function BrandMark() {
         <Text style={styles.lineBottom}>M E</Text>
       </View>
       <View style={styles.copyWrap}>
-        <Text style={styles.copyLine}>You</Text>
-        <Text style={styles.copyLine}>Owe</Text>
-        <Text style={styles.copyLine}>Me</Text>
+        <Text style={styles.copyLine}>You Owe Me</Text>
       </View>
     </View>
   );
@@ -25,10 +23,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   square: {
-    width: 96,
+    width: 64,
     aspectRatio: 1,
-    borderRadius: 18,
-    borderWidth: 3,
+    borderRadius: 14,
+    borderWidth: 2,
     borderColor: Colors.light.accent,
     alignItems: 'center',
     justifyContent: 'center',
@@ -37,30 +35,30 @@ const styles = StyleSheet.create({
   lineTop: {
     color: Colors.light.accent,
     fontFamily: Fonts.serif,
-    fontSize: 24,
-    lineHeight: 26,
-    letterSpacing: 3,
-    marginBottom: 4,
+    fontSize: 16,
+    lineHeight: 16,
+    letterSpacing: 1.5,
+    marginBottom: 2,
     textAlign: 'center',
   },
   lineBottom: {
     color: Colors.light.accent,
     fontFamily: Fonts.serif,
-    fontSize: 24,
-    lineHeight: 26,
-    letterSpacing: 3,
+    fontSize: 16,
+    lineHeight: 16,
+    letterSpacing: 1.5,
     textAlign: 'center',
   },
   copyWrap: {
-    height: 96,
+    height: 64,
     justifyContent: 'center',
-    marginLeft: 14,
+    marginLeft: 10,
   },
   copyLine: {
     color: Colors.light.text,
     fontFamily: Fonts.serif,
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: 1,
+    fontSize: 18,
+    lineHeight: 18,
+    letterSpacing: 0.8,
   },
 });
