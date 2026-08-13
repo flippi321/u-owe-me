@@ -118,14 +118,31 @@ export default function AsahiWheel() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Pressable
-        onPress={() => router.back()}
-        hitSlop={10}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-        style={styles.backButton}>
-        <MaterialCommunityIcons name="chevron-left" size={26} color={Colors.light.text} />
-      </Pressable>
+      <View style={styles.headerRow}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}>
+          <MaterialCommunityIcons name="chevron-left" size={26} color={Colors.light.text} />
+        </Pressable>
+
+        {user ? (
+          <View style={styles.balanceBadge}>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={Colors.light.accent} />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="currency-jpy" size={14} color={Colors.light.accent} />
+                <Text style={styles.balanceBadgeText} numberOfLines={1}>
+                  {error ? '—' : formatCurrency(coinBalance)}
+                </Text>
+              </>
+            )}
+          </View>
+        ) : null}
+      </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
@@ -145,11 +162,6 @@ export default function AsahiWheel() {
             </View>
           ) : (
             <>
-              <View style={[styles.panel, styles.panelCentered]}>
-                <Text style={styles.sectionLabel}>UOME Coins</Text>
-                <Text style={styles.balance}>{formatCurrency(coinBalance)}</Text>
-              </View>
-
               <View style={styles.panel}>
                 <Text style={styles.betLabel}>Bet</Text>
                 <View style={styles.betOptionsRow}>
@@ -230,6 +242,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.background,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    marginHorizontal: 18,
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -239,8 +258,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.surface,
     borderWidth: 1,
     borderColor: Colors.light.line,
-    marginTop: 18,
-    marginLeft: 18,
+  },
+  balanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.light.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.light.accent,
+  },
+  balanceBadgeText: {
+    color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 14,
   },
   scrollContent: {
     flexGrow: 1,
@@ -275,19 +308,6 @@ const styles = StyleSheet.create({
   },
   panelCentered: {
     alignItems: 'center',
-  },
-  sectionLabel: {
-    color: Colors.light.accent,
-    fontSize: 12,
-    letterSpacing: 2.2,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  balance: {
-    color: Colors.light.text,
-    fontFamily: Fonts.serif,
-    fontSize: 36,
-    lineHeight: 42,
   },
   note: {
     color: Colors.light.textMuted,

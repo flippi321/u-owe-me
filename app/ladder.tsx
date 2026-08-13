@@ -3,19 +3,27 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { PrimaryButton } from '@/components/auth/buttons';
+import { SecondaryButton } from '@/components/auth/buttons';
 import { SlotReel } from '@/components/casino/reel';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
-import { COIN_FLIP_SIDES, playCoinFlip, type CoinFlipResult, type CoinFlipSide } from '@/utils/coin-flip';
 import { fetchCoinBalance } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
+import {
+  LADDER_MAX_RUNGS,
+  LADDER_MULTIPLIERS,
+  LADDER_SIDES,
+  rollLadderSide,
+  settleLadderRound,
+  type LadderRoundResult,
+  type LadderSide,
+} from '@/utils/ladder';
 
 const BET_AMOUNTS = [100, 250, 500];
-const REEL_ROTATIONS = 12;
-const REEL_DURATION_MS = 3200;
+const REEL_ROTATIONS = 8;
+const REEL_DURATION_MS = 1600;
 
-export default function CoinFlip() {
+export default function Ladder() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
 
@@ -24,13 +32,15 @@ export default function CoinFlip() {
   const [error, setError] = useState<string | null>(null);
 
   const [betAmount, setBetAmount] = useState<number | null>(null);
-  const [guess, setGuess] = useState<CoinFlipSide | null>(null);
-  const [isFlipping, setIsFlipping] = useState(false);
-  const [flipError, setFlipError] = useState<string | null>(null);
+  const [roundActive, setRoundActive] = useState(false);
+  const [rungsCleared, setRungsCleared] = useState(0);
+  const [pendingGuess, setPendingGuess] = useState<LadderSide | null>(null);
+  const [pendingOutcome, setPendingOutcome] = useState<LadderSide | null>(null);
   const [spinToken, setSpinToken] = useState(0);
-  const [pendingResult, setPendingResult] = useState<CoinFlipResult | null>(null);
-  const [hasLanded, setHasLanded] = useState(false);
-  const [revealedResult, setRevealedResult] = useState<CoinFlipResult | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
+  const [ladderError, setLadderError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<LadderRoundResult | null>(null);
 
   const loadBalance = useCallback(async (userId: string) => {
     const result = await fetchCoinBalance(userId);
@@ -60,41 +70,77 @@ export default function CoinFlip() {
     };
   }, [user, loadBalance]);
 
-  useEffect(() => {
-    if (!hasLanded || !pendingResult || !user) return;
+  const resetRound = (keepBet: boolean) => {
+    setRoundActive(false);
+    setRungsCleared(0);
+    if (!keepBet) setBetAmount(null);
+    setPendingGuess(null);
+    setPendingOutcome(null);
+  };
 
-    setRevealedResult(pendingResult);
-    loadBalance(user.id).then(() => setIsFlipping(false));
-  }, [hasLanded, pendingResult, user, loadBalance]);
+  const handleGuess = (side: LadderSide) => {
+    if (!user || betAmount === null || isResolving || isSettling) return;
 
-  const handleReelLanded = () => setHasLanded(true);
+    setRoundActive(true);
+    setLadderError(null);
+    setLastResult(null);
 
-  const handleFlip = async () => {
-    if (!user || betAmount === null || guess === null) return;
-
-    if (betAmount > coinBalance) {
-      setFlipError("You don't have enough UOME Coins for that bet.");
-      return;
-    }
-
-    setIsFlipping(true);
-    setFlipError(null);
-    setRevealedResult(null);
-
-    const result = await playCoinFlip(user.id, betAmount, guess);
-
-    if (result.error) {
-      setIsFlipping(false);
-      setFlipError(result.error);
-      return;
-    }
-
-    setPendingResult(result.data);
-    setHasLanded(false);
+    const outcome = rollLadderSide();
+    setPendingGuess(side);
+    setPendingOutcome(outcome);
+    setIsResolving(true);
     setSpinToken((token) => token + 1);
   };
 
-  const isDisabled = isFlipping || isLoading || !!error || !user;
+  const handleReelLanded = async () => {
+    setIsResolving(false);
+
+    if (!user || betAmount === null || pendingGuess === null || pendingOutcome === null) return;
+
+    if (pendingGuess === pendingOutcome) {
+      setRungsCleared((count) => count + 1);
+      return;
+    }
+
+    setIsSettling(true);
+    const result = await settleLadderRound(user.id, betAmount, rungsCleared, true);
+    setIsSettling(false);
+
+    if (result.error) {
+      setLadderError(result.error);
+      return;
+    }
+
+    setLastResult(result.data);
+    await loadBalance(user.id);
+    resetRound(true);
+  };
+
+  const handleCashOut = async () => {
+    if (!user || betAmount === null || rungsCleared === 0 || isResolving || isSettling) return;
+
+    setIsSettling(true);
+    setLadderError(null);
+
+    const result = await settleLadderRound(user.id, betAmount, rungsCleared, false);
+
+    setIsSettling(false);
+
+    if (result.error) {
+      setLadderError(result.error);
+      return;
+    }
+
+    setLastResult(result.data);
+    await loadBalance(user.id);
+    resetRound(false);
+  };
+
+  const isBusy = isResolving || isSettling;
+  const isDisabled = isBusy || isLoading || !!error || !user;
+  const currentMultiplier = rungsCleared > 0 ? LADDER_MULTIPLIERS[rungsCleared - 1] : 0;
+  const currentPayout = betAmount !== null ? Math.round(betAmount * currentMultiplier * 100) / 100 : 0;
+  const ladderComplete = rungsCleared >= LADDER_MAX_RUNGS;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -126,7 +172,7 @@ export default function CoinFlip() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-          <Text style={styles.title}>English or Spanish</Text>
+          <Text style={styles.title}>The Ladder</Text>
 
           {!user ? (
             <View style={[styles.panel, styles.panelCentered]}>
@@ -151,14 +197,14 @@ export default function CoinFlip() {
                       <Pressable
                         key={amount}
                         onPress={() => setBetAmount(amount)}
-                        disabled={isDisabled}
+                        disabled={isDisabled || roundActive}
                         accessibilityRole="button"
                         accessibilityState={{ selected: isSelected }}
                         style={({ pressed }) => [
                           styles.option,
                           isSelected && styles.optionSelected,
-                          pressed && !isDisabled && styles.optionPressed,
-                          isDisabled && styles.optionDisabled,
+                          pressed && !isDisabled && !roundActive && styles.optionPressed,
+                          (isDisabled || roundActive) && styles.optionDisabled,
                         ]}>
                         <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
                           {formatCurrency(amount)}
@@ -170,62 +216,79 @@ export default function CoinFlip() {
               </View>
 
               <View style={styles.panel}>
-                <Text style={styles.betLabel}>Call it</Text>
-                <View style={styles.optionsRow}>
-                  {COIN_FLIP_SIDES.map((side) => {
-                    const isSelected = guess === side;
+                <View style={styles.rungRow}>
+                  {LADDER_MULTIPLIERS.map((multiplier, index) => {
+                    const rung = index + 1;
+                    const cleared = rung <= rungsCleared;
+                    const isNext = rung === rungsCleared + 1 && !ladderComplete;
                     return (
-                      <Pressable
-                        key={side}
-                        onPress={() => setGuess(side)}
-                        disabled={isDisabled}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                        style={({ pressed }) => [
-                          styles.option,
-                          isSelected && styles.optionSelected,
-                          pressed && !isDisabled && styles.optionPressed,
-                          isDisabled && styles.optionDisabled,
-                        ]}>
-                        <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>{side}</Text>
-                      </Pressable>
+                      <View
+                        key={rung}
+                        style={[styles.rung, cleared && styles.rungCleared, isNext && styles.rungNext]}>
+                        <Text style={[styles.rungLabel, cleared && styles.rungLabelCleared]}>×{multiplier}</Text>
+                      </View>
                     );
                   })}
                 </View>
+                <Text style={styles.rungCaption}>
+                  {rungsCleared > 0
+                    ? `Cleared ${rungsCleared}/${LADDER_MAX_RUNGS} · current winnings ${formatCurrency(currentPayout)}`
+                    : 'Guess right to start climbing.'}
+                </Text>
               </View>
 
               <View style={styles.reelsPanel}>
                 <SlotReel
-                  values={COIN_FLIP_SIDES}
-                  targetValue={pendingResult?.outcome ?? null}
+                  values={LADDER_SIDES}
+                  targetValue={pendingOutcome}
                   spinToken={spinToken}
                   rotations={REEL_ROTATIONS}
                   durationMs={REEL_DURATION_MS}
                   onLanded={handleReelLanded}
-                  width={220}
+                  width={200}
                   fontSize={24}
                 />
               </View>
 
-              {flipError ? <Text style={styles.errorText}>{flipError}</Text> : null}
+              {!ladderComplete ? (
+                <View style={styles.optionsRow}>
+                  {LADDER_SIDES.map((side) => (
+                    <Pressable
+                      key={side}
+                      onPress={() => handleGuess(side)}
+                      disabled={isDisabled || betAmount === null}
+                      accessibilityRole="button"
+                      style={({ pressed }) => [
+                        styles.option,
+                        pressed && !isDisabled && betAmount !== null && styles.optionPressed,
+                        (isDisabled || betAmount === null) && styles.optionDisabled,
+                      ]}>
+                      <Text style={styles.optionLabel}>{side}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.note}>Top of the ladder — cash out to collect.</Text>
+              )}
 
-              <PrimaryButton
-                label="Flip"
-                onPress={handleFlip}
-                loading={isFlipping}
-                disabled={isDisabled || betAmount === null || guess === null}
-              />
+              {rungsCleared > 0 ? (
+                <SecondaryButton
+                  label={`Cash Out — ${formatCurrency(currentPayout)}`}
+                  onPress={handleCashOut}
+                  disabled={isBusy}
+                />
+              ) : null}
 
-              {revealedResult ? (
+              {ladderError ? <Text style={styles.errorText}>{ladderError}</Text> : null}
+
+              {lastResult ? (
                 <View style={[styles.panel, styles.panelCentered]}>
-                  <Text style={revealedResult.won ? styles.resultWin : styles.resultLose}>
-                    {revealedResult.won
-                      ? `${revealedResult.outcome}! You won ${formatCurrency(revealedResult.payout)}.`
-                      : `${revealedResult.outcome}! You lost ${formatCurrency(revealedResult.betAmount)}.`}
+                  <Text style={lastResult.busted ? styles.resultLose : styles.resultWin}>
+                    {lastResult.busted
+                      ? `Wrong call — you lost ${formatCurrency(lastResult.betAmount)}.`
+                      : `Cashed out at ×${lastResult.multiplier}! You won ${formatCurrency(lastResult.payout)}.`}
                   </Text>
-                  <Text style={styles.resultNet}>
-                    {formatCurrency(revealedResult.net, { signDisplay: 'always' })}
-                  </Text>
+                  <Text style={styles.resultNet}>{formatCurrency(lastResult.net, { signDisplay: 'always' })}</Text>
                 </View>
               ) : null}
             </>
@@ -355,6 +418,42 @@ const styles = StyleSheet.create({
   },
   optionLabelSelected: {
     color: Colors.light.surface,
+  },
+  rungRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  rung: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.light.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.light.line,
+  },
+  rungCleared: {
+    backgroundColor: Colors.light.sage,
+    borderColor: Colors.light.sage,
+  },
+  rungNext: {
+    borderColor: Colors.light.accent,
+    borderWidth: 2,
+  },
+  rungLabel: {
+    color: Colors.light.textMuted,
+    fontFamily: Fonts.serif,
+    fontSize: 12,
+  },
+  rungLabelCleared: {
+    color: Colors.light.surface,
+  },
+  rungCaption: {
+    color: Colors.light.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
   },
   reelsPanel: {
     borderRadius: 28,

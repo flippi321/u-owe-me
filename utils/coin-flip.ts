@@ -57,7 +57,7 @@ export async function playCoinFlip(
 
   const outcome = flipCoin();
   const won = outcome === guess;
-  const payout = won ? Math.round(betAmount * 1.9) : 0;
+  const payout = won ? betAmount * 2 : 0;
   const net = won ? payout - betAmount : -betAmount;
 
   const { data: transaction, error: insertError } = await supabase

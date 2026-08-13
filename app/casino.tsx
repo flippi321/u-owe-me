@@ -191,7 +191,21 @@ export default function Casino() {
                 </View>
                 <View style={styles.gameRowText}>
                   <Text style={styles.gameTitle}>English or Spanish</Text>
-                  <Text style={styles.gameSubtitle}>Call it — win 1.9x, or lose it all</Text>
+                  <Text style={styles.gameSubtitle}>Call it — win 2x, or lose it all</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push('/ladder')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.gameRow, pressed && styles.gameRowPressed]}>
+                <View style={styles.gameIconWrap}>
+                  <MaterialCommunityIcons name="stairs-up" size={22} color={Colors.light.accent} />
+                </View>
+                <View style={styles.gameRowText}>
+                  <Text style={styles.gameTitle}>The Ladder</Text>
+                  <Text style={styles.gameSubtitle}>Climb red or black — one wrong call loses it all</Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
               </Pressable>
