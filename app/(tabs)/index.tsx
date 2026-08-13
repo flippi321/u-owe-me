@@ -1,5 +1,6 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -18,7 +19,7 @@ import { BrandMark } from '@/components/brand-mark';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
 import { fetchBalances, settleUp, type BalanceEntry } from '@/utils/balances';
-import { fetchCoinBalance } from '@/utils/casino';
+import { fetchCoinsOwed } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
 
 // Display-only rounding for the settle-up popup — never written back to the DB.
@@ -35,13 +36,15 @@ export default function HomeScreen() {
   const [owedTo, setOwedTo] = useState<BalanceEntry[]>([]);
   const [owed, setOwed] = useState<BalanceEntry[]>([]);
   const [interpersonalNetBalance, setInterpersonalNetBalance] = useState(0);
-  const [asahiFundBalance, setAsahiFundBalance] = useState(0);
-  // Coins bought (net of cash-outs) are yen you've handed to the Asahi Fund
-  // — a debt like any other, so it comes out of the overall Net Balance.
+  const [asahiFundOwed, setAsahiFundOwed] = useState(0);
+  // Coins bought net of cash-outs — yen you've handed to the Asahi Fund,
+  // a debt like any other, so it comes out of the overall Net Balance. This
+  // deliberately ignores game wins/losses (see fetchCoinsOwed): what you owe
+  // only moves on an actual buy-in or cash-out, not on how a game goes.
   // Derived at render time (rather than combined once when fetched) so the
   // two numbers can never drift out of sync if one of the two fetches below
   // fails on a later refresh while the other succeeds.
-  const netBalance = interpersonalNetBalance - Math.max(asahiFundBalance, 0);
+  const netBalance = interpersonalNetBalance - Math.max(asahiFundOwed, 0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,37 +54,48 @@ export default function HomeScreen() {
   const [settleError, setSettleError] = useState<string | null>(null);
 
   const loadBalances = useCallback(async (userId: string) => {
-    const [balancesResult, coinResult] = await Promise.all([fetchBalances(userId), fetchCoinBalance(userId)]);
+    // Caught here so a rejected fetch (network blip, thrown error) can't
+    // leave a `.then()`-based caller — like the focus effect below —
+    // waiting forever for a callback that never comes.
+    try {
+      const [balancesResult, coinResult] = await Promise.all([fetchBalances(userId), fetchCoinsOwed(userId)]);
 
-    if (balancesResult.error) {
-      setError(balancesResult.error);
-    } else if (balancesResult.data) {
-      setOwedTo(balancesResult.data.owedToMe);
-      setOwed(balancesResult.data.iOwe);
-      setInterpersonalNetBalance(balancesResult.data.netBalance);
-      setError(null);
+      if (balancesResult.error) {
+        setError(balancesResult.error);
+      } else if (balancesResult.data) {
+        setOwedTo(balancesResult.data.owedToMe);
+        setOwed(balancesResult.data.iOwe);
+        setInterpersonalNetBalance(balancesResult.data.netBalance);
+        setError(null);
+      }
+
+      if (coinResult.data !== null) setAsahiFundOwed(coinResult.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load your balances.');
     }
-
-    if (coinResult.data !== null) setAsahiFundBalance(coinResult.data);
   }, []);
 
-  useEffect(() => {
-    if (!user) {
-      setIsLoading(false);
-      return;
-    }
+  // First focus: fetch in the background without blocking the initial paint
+  // (the panel renders immediately; only the balance figure itself waits).
+  // Every later focus (tab switches, coming back from another screen)
+  // refetches silently the same way, so the balances never go stale.
+  const hasLoadedOnce = useRef(false);
 
-    let cancelled = false;
-    setIsLoading(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
-    loadBalances(user.id).then(() => {
-      if (!cancelled) setIsLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, loadBalances]);
+      if (!hasLoadedOnce.current) {
+        hasLoadedOnce.current = true;
+        loadBalances(user.id).then(() => setIsLoading(false));
+      } else {
+        loadBalances(user.id);
+      }
+    }, [user, loadBalances])
+  );
 
   const handleRefresh = async () => {
     if (!user) return;
@@ -141,88 +155,93 @@ export default function HomeScreen() {
               <Text style={styles.sectionLabel}>Net Balance</Text>
               <Text style={styles.guestNote}>Sign in with email to see your real balances.</Text>
             </View>
-          ) : isLoading ? (
-            <View style={styles.balancePanel}>
-              <ActivityIndicator color={Colors.light.accent} />
-            </View>
           ) : error ? (
             <View style={styles.balancePanel}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : (
             <>
+              {/* Panel renders immediately on navigation; only the number
+              itself waits on the fetch, so the page never blocks on the
+              network before it paints. */}
               <View style={styles.balancePanel}>
                 <Text style={styles.sectionLabel}>Net Balance</Text>
-                <Text
-                  style={[
-                    styles.netBalance,
-                    netBalance > 0 && styles.netBalancePositive,
-                    netBalance < 0 && styles.netBalanceNegative,
-                  ]}>
-                  {formatCurrency(netBalance, { signDisplay: 'exceptZero' })}
-                </Text>
+                {isLoading ? (
+                  <ActivityIndicator color={Colors.light.accent} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.netBalance,
+                      netBalance > 0 && styles.netBalancePositive,
+                      netBalance < 0 && styles.netBalanceNegative,
+                    ]}>
+                    {formatCurrency(netBalance, { signDisplay: 'exceptZero' })}
+                  </Text>
+                )}
                 <Text style={styles.balanceCaption}>Overall amount currently owed across active groups.</Text>
               </View>
 
-              <View style={[styles.listsWrap, isWide && styles.listsWrapWide]}>
-                <View style={[styles.listPanel, isWide && styles.flexList]}>
-                  <Text style={styles.listTitle}>Owed to</Text>
-                  {owedTo.length === 0 ? (
-                    <Text style={styles.emptyNote}>Nobody owes you anything right now.</Text>
-                  ) : (
-                    <View style={styles.listBody}>
-                      {owedTo.map((entry) => (
-                        <Pressable
-                          key={entry.profile.id}
-                          onPress={() => openSettlePopup(entry)}
-                          accessibilityRole="button"
-                          style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
-                          <View style={styles.rowLeft}>
-                            <Text style={styles.rowName}>{entry.profile.full_name ?? entry.profile.username}</Text>
-                            <Text style={styles.rowNote}>
-                              {entry.recordCount} unsettled {entry.recordCount === 1 ? 'expense' : 'expenses'}
-                            </Text>
-                          </View>
-                          <Text style={styles.rowAmount}>{formatCurrency(entry.amount)}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                </View>
+              {isLoading ? null : (
+                <View style={[styles.listsWrap, isWide && styles.listsWrapWide]}>
+                  <View style={[styles.listPanel, isWide && styles.flexList]}>
+                    <Text style={styles.listTitle}>Owed to</Text>
+                    {owedTo.length === 0 ? (
+                      <Text style={styles.emptyNote}>Nobody owes you anything right now.</Text>
+                    ) : (
+                      <View style={styles.listBody}>
+                        {owedTo.map((entry) => (
+                          <Pressable
+                            key={entry.profile.id}
+                            onPress={() => openSettlePopup(entry)}
+                            accessibilityRole="button"
+                            style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
+                            <View style={styles.rowLeft}>
+                              <Text style={styles.rowName}>{entry.profile.full_name ?? entry.profile.username}</Text>
+                              <Text style={styles.rowNote}>
+                                {entry.recordCount} unsettled {entry.recordCount === 1 ? 'expense' : 'expenses'}
+                              </Text>
+                            </View>
+                            <Text style={styles.rowAmount}>{formatCurrency(entry.amount)}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
 
-                <View style={[styles.listPanel, isWide && styles.flexList]}>
-                  <Text style={styles.listTitle}>Owed</Text>
-                  {owed.length === 0 && asahiFundBalance <= 0 ? (
-                    <Text style={styles.emptyNote}>You&apos;re all settled up.</Text>
-                  ) : (
-                    <View style={styles.listBody}>
-                      {asahiFundBalance > 0 ? (
-                        <Pressable
-                          onPress={() => router.push('/casino')}
-                          accessibilityRole="button"
-                          style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
-                          <View style={styles.rowLeft}>
-                            <Text style={styles.rowName}>Asahi Fund</Text>
-                            <Text style={styles.rowNote}>UOME Coins bought</Text>
+                  <View style={[styles.listPanel, isWide && styles.flexList]}>
+                    <Text style={styles.listTitle}>Owed</Text>
+                    {owed.length === 0 && asahiFundOwed <= 0 ? (
+                      <Text style={styles.emptyNote}>You&apos;re all settled up.</Text>
+                    ) : (
+                      <View style={styles.listBody}>
+                        {asahiFundOwed > 0 ? (
+                          <Pressable
+                            onPress={() => router.push('/casino')}
+                            accessibilityRole="button"
+                            style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
+                            <View style={styles.rowLeft}>
+                              <Text style={styles.rowName}>Asahi Fund</Text>
+                              <Text style={styles.rowNote}>UOME Coins bought</Text>
+                            </View>
+                            <Text style={styles.rowAmount}>{formatCurrency(asahiFundOwed)}</Text>
+                          </Pressable>
+                        ) : null}
+                        {owed.map((entry) => (
+                          <View key={entry.profile.id} style={styles.row}>
+                            <View style={styles.rowLeft}>
+                              <Text style={styles.rowName}>{entry.profile.full_name ?? entry.profile.username}</Text>
+                              <Text style={styles.rowNote}>
+                                {entry.recordCount} unsettled {entry.recordCount === 1 ? 'expense' : 'expenses'}
+                              </Text>
+                            </View>
+                            <Text style={styles.rowAmount}>{formatCurrency(entry.amount)}</Text>
                           </View>
-                          <Text style={styles.rowAmount}>{formatCurrency(asahiFundBalance)}</Text>
-                        </Pressable>
-                      ) : null}
-                      {owed.map((entry) => (
-                        <View key={entry.profile.id} style={styles.row}>
-                          <View style={styles.rowLeft}>
-                            <Text style={styles.rowName}>{entry.profile.full_name ?? entry.profile.username}</Text>
-                            <Text style={styles.rowNote}>
-                              {entry.recordCount} unsettled {entry.recordCount === 1 ? 'expense' : 'expenses'}
-                            </Text>
-                          </View>
-                          <Text style={styles.rowAmount}>{formatCurrency(entry.amount)}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
+              )}
             </>
           )}
         </View>

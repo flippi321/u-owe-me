@@ -1,11 +1,99 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PrimaryButton } from '@/components/auth/buttons';
+import { SlotReel } from '@/components/asahi-wheel/reel';
 import { Colors, Fonts } from '@/constants/theme';
+import { useAuthStore } from '@/store/auth-store';
+import { playAsahiWheel, type AsahiWheelResult } from '@/utils/asahi-wheel';
+import { fetchCoinBalance } from '@/utils/casino';
+import { formatCurrency } from '@/utils/currency';
+
+const REEL_ROTATIONS = [3, 4, 5];
+const REEL_DURATIONS = [1200, 1850, 2500];
+const BET_AMOUNTS = [100, 250, 500];
 
 export default function AsahiWheel() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+
+  const [coinBalance, setCoinBalance] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [betAmount, setBetAmount] = useState<number | null>(null);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [spinError, setSpinError] = useState<string | null>(null);
+  const [spinToken, setSpinToken] = useState(0);
+  const [pendingResult, setPendingResult] = useState<AsahiWheelResult | null>(null);
+  const [landedCount, setLandedCount] = useState(0);
+  const [revealedResult, setRevealedResult] = useState<AsahiWheelResult | null>(null);
+
+  const loadBalance = useCallback(async (userId: string) => {
+    const result = await fetchCoinBalance(userId);
+    if (result.error) {
+      setError(result.error);
+    } else if (result.data !== null) {
+      setCoinBalance(result.data);
+      setError(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    loadBalance(user.id).then(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, loadBalance]);
+
+  useEffect(() => {
+    if (landedCount < 3 || !pendingResult || !user) return;
+
+    setRevealedResult(pendingResult);
+    loadBalance(user.id).then(() => setIsSpinning(false));
+  }, [landedCount, pendingResult, user, loadBalance]);
+
+  const handleReelLanded = () => setLandedCount((count) => count + 1);
+
+  const handleSpin = async () => {
+    if (!user || betAmount === null) return;
+
+    if (betAmount > coinBalance) {
+      setSpinError("You don't have enough UOME Coins for that bet.");
+      return;
+    }
+
+    setIsSpinning(true);
+    setSpinError(null);
+    setRevealedResult(null);
+
+    const result = await playAsahiWheel(user.id, betAmount);
+
+    if (result.error) {
+      setIsSpinning(false);
+      setSpinError(result.error);
+      return;
+    }
+
+    setPendingResult(result.data);
+    setLandedCount(0);
+    setSpinToken((token) => token + 1);
+  };
+
+  const isDisabled = isSpinning || isLoading || !!error || !user;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -18,10 +106,107 @@ export default function AsahiWheel() {
         <MaterialCommunityIcons name="chevron-left" size={26} color={Colors.light.text} />
       </Pressable>
 
-      <View style={styles.container}>
-        <Text style={styles.title}>Asahi Wheel</Text>
-        <Text style={styles.caption}>Coming soon.</Text>
-      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Asahi Wheel</Text>
+
+          {!user ? (
+            <View style={[styles.panel, styles.panelCentered]}>
+              <Text style={styles.note}>Sign in with email to play.</Text>
+            </View>
+          ) : isLoading ? (
+            <View style={[styles.panel, styles.panelCentered]}>
+              <ActivityIndicator color={Colors.light.accent} />
+            </View>
+          ) : error ? (
+            <View style={[styles.panel, styles.panelCentered]}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : (
+            <>
+              <View style={[styles.panel, styles.panelCentered]}>
+                <Text style={styles.sectionLabel}>UOME Coins</Text>
+                <Text style={styles.balance}>{formatCurrency(coinBalance)}</Text>
+              </View>
+
+              <View style={styles.panel}>
+                <Text style={styles.betLabel}>Bet</Text>
+                <View style={styles.betOptionsRow}>
+                  {BET_AMOUNTS.map((amount) => {
+                    const isSelected = betAmount === amount;
+                    return (
+                      <Pressable
+                        key={amount}
+                        onPress={() => setBetAmount(amount)}
+                        disabled={isDisabled}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        style={({ pressed }) => [
+                          styles.betOption,
+                          isSelected && styles.betOptionSelected,
+                          pressed && !isDisabled && styles.betOptionPressed,
+                          isDisabled && styles.betOptionDisabled,
+                        ]}>
+                        <Text style={[styles.betOptionLabel, isSelected && styles.betOptionLabelSelected]}>
+                          {formatCurrency(amount)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.reelsPanel}>
+                <View style={styles.reelsRow}>
+                  <SlotReel
+                    targetValue={pendingResult?.reels[0] ?? null}
+                    spinToken={spinToken}
+                    rotations={REEL_ROTATIONS[0]}
+                    durationMs={REEL_DURATIONS[0]}
+                    onLanded={handleReelLanded}
+                  />
+                  <SlotReel
+                    targetValue={pendingResult?.reels[1] ?? null}
+                    spinToken={spinToken}
+                    rotations={REEL_ROTATIONS[1]}
+                    durationMs={REEL_DURATIONS[1]}
+                    onLanded={handleReelLanded}
+                  />
+                  <SlotReel
+                    targetValue={pendingResult?.reels[2] ?? null}
+                    spinToken={spinToken}
+                    rotations={REEL_ROTATIONS[2]}
+                    durationMs={REEL_DURATIONS[2]}
+                    onLanded={handleReelLanded}
+                  />
+                </View>
+              </View>
+
+              {spinError ? <Text style={styles.errorText}>{spinError}</Text> : null}
+
+              <PrimaryButton
+                label="Spin"
+                onPress={handleSpin}
+                loading={isSpinning}
+                disabled={isDisabled || betAmount === null}
+              />
+
+              {revealedResult ? (
+                <View style={[styles.panel, styles.panelCentered]}>
+                  <Text style={revealedResult.multiplier > 0 ? styles.resultWin : styles.resultLose}>
+                    {revealedResult.multiplier > 0
+                      ? `You won ${formatCurrency(revealedResult.payout)}! (×${revealedResult.multiplier})`
+                      : `You lost ${formatCurrency(revealedResult.betAmount)}.`}
+                  </Text>
+                  <Text style={styles.resultNet}>
+                    {formatCurrency(revealedResult.net, { signDisplay: 'always' })}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -43,19 +228,129 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginLeft: 18,
   },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingBottom: 36,
+  },
   container: {
+    width: '100%',
+    maxWidth: 420,
+    paddingHorizontal: 16,
+    gap: 16,
+  },
+  title: {
+    color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 26,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  panel: {
+    borderRadius: 28,
+    padding: 20,
+    backgroundColor: Colors.light.surface,
+    borderWidth: 1,
+    borderColor: Colors.light.line,
+    shadowColor: Colors.light.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+  },
+  panelCentered: {
+    alignItems: 'center',
+  },
+  sectionLabel: {
+    color: Colors.light.accent,
+    fontSize: 12,
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  balance: {
+    color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 36,
+    lineHeight: 42,
+  },
+  note: {
+    color: Colors.light.textMuted,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  errorText: {
+    color: Colors.light.accent,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  betLabel: {
+    color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  betOptionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  betOption: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    borderRadius: 16,
+    paddingVertical: 14,
+    backgroundColor: Colors.light.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.light.line,
   },
-  title: {
-    fontFamily: Fonts.serif,
-    fontSize: 20,
+  betOptionSelected: {
+    backgroundColor: Colors.light.accent,
+    borderColor: Colors.light.accent,
+  },
+  betOptionPressed: {
+    opacity: 0.8,
+  },
+  betOptionDisabled: {
+    opacity: 0.5,
+  },
+  betOptionLabel: {
     color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 16,
   },
-  caption: {
+  betOptionLabelSelected: {
+    color: Colors.light.surface,
+  },
+  reelsPanel: {
+    borderRadius: 28,
+    padding: 20,
+    backgroundColor: Colors.light.surface,
+    borderWidth: 1,
+    borderColor: Colors.light.line,
+    alignItems: 'center',
+  },
+  reelsRow: {
+    flexDirection: 'row',
+    gap: 14,
+    justifyContent: 'center',
+  },
+  resultWin: {
+    color: Colors.light.sage,
+    fontFamily: Fonts.serif,
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  resultLose: {
+    color: Colors.light.accent,
+    fontFamily: Fonts.serif,
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  resultNet: {
     color: Colors.light.textMuted,
     fontSize: 14,
+    marginTop: 6,
   },
 });

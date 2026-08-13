@@ -18,7 +18,7 @@ import {
 import { PrimaryButton, SecondaryButton } from '@/components/auth/buttons';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
-import { buyCoins, fetchCoinBalance } from '@/utils/casino';
+import { buyCoins, cashOutCoins, fetchCoinBalance } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
 
 export default function Casino() {
@@ -33,10 +33,10 @@ export default function Casino() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
-  const [buyAmountText, setBuyAmountText] = useState('');
-  const [isBuying, setIsBuying] = useState(false);
-  const [buyError, setBuyError] = useState<string | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [updateAmountText, setUpdateAmountText] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const loadBalance = useCallback(async (userId: string) => {
     const result = await fetchCoinBalance(userId);
@@ -73,40 +73,46 @@ export default function Casino() {
     setIsRefreshing(false);
   };
 
-  const openBuyModal = () => {
-    setBuyError(null);
-    setBuyAmountText('');
-    setIsBuyModalOpen(true);
+  const openUpdateModal = () => {
+    setUpdateError(null);
+    setUpdateAmountText(String(coinBalance));
+    setIsUpdateModalOpen(true);
   };
 
-  const closeBuyModal = () => {
-    if (isBuying) return;
-    setIsBuyModalOpen(false);
+  const closeUpdateModal = () => {
+    if (isUpdating) return;
+    setIsUpdateModalOpen(false);
   };
 
-  const handleConfirmBuy = async () => {
+  const handleConfirmUpdate = async () => {
     if (!user) return;
 
-    const amount = Number(buyAmountText);
-    if (!Number.isInteger(amount) || amount <= 0) {
-      setBuyError('Enter an amount greater than ¥0.');
+    const newBalance = Number(updateAmountText);
+    if (!Number.isInteger(newBalance) || newBalance < 0) {
+      setUpdateError('Enter an amount of ¥0 or more.');
       return;
     }
 
-    setIsBuying(true);
-    setBuyError(null);
+    const diff = newBalance - coinBalance;
+    if (diff === 0) {
+      setUpdateError('Enter a different amount to buy in or cash out.');
+      return;
+    }
 
-    const result = await buyCoins(user.id, amount);
+    setIsUpdating(true);
+    setUpdateError(null);
+
+    const result = diff > 0 ? await buyCoins(user.id, diff) : await cashOutCoins(user.id, -diff);
 
     if (result.error) {
-      setIsBuying(false);
-      setBuyError(result.error);
+      setIsUpdating(false);
+      setUpdateError(result.error);
       return;
     }
 
-    setIsBuyModalOpen(false);
+    setIsUpdateModalOpen(false);
     await loadBalance(user.id);
-    setIsBuying(false);
+    setIsUpdating(false);
   };
 
   return (
@@ -150,16 +156,16 @@ export default function Casino() {
           ) : (
             <>
               <Pressable
-                onPress={openBuyModal}
+                onPress={openUpdateModal}
                 accessibilityRole="button"
-                accessibilityLabel="Buy UOME Coins"
+                accessibilityLabel="Update UOME Coins"
                 style={({ pressed }) => [styles.panel, styles.panelCentered, pressed && styles.panelPressed]}>
                 <View style={styles.balanceBadge}>
-                  <MaterialCommunityIcons name="plus" size={16} color={Colors.light.surface} />
+                  <MaterialCommunityIcons name="pencil" size={16} color={Colors.light.surface} />
                 </View>
                 <Text style={styles.sectionLabel}>UOME Coins</Text>
                 <Text style={styles.balance}>{formatCurrency(coinBalance)}</Text>
-                <Text style={styles.balanceCaption}>Tap to buy more coins · 1 coin = ¥1</Text>
+                <Text style={styles.balanceCaption}>Tap to buy in or cash out · 1 coin = ¥1</Text>
               </Pressable>
 
               <Pressable
@@ -171,7 +177,7 @@ export default function Casino() {
                 </View>
                 <View style={styles.gameRowText}>
                   <Text style={styles.gameTitle}>Asahi Wheel</Text>
-                  <Text style={styles.gameSubtitle}>Coming soon</Text>
+                  <Text style={styles.gameSubtitle}>The best gotdamn pachinko there is</Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
               </Pressable>
@@ -180,11 +186,14 @@ export default function Casino() {
         </View>
       </ScrollView>
 
-      <Modal visible={isBuyModalOpen} transparent animationType="fade" onRequestClose={closeBuyModal}>
+      <Modal visible={isUpdateModalOpen} transparent animationType="fade" onRequestClose={closeUpdateModal}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { width: Math.min(width - 48, 420) }]}>
-            <Text style={styles.modalTitle}>Buy UOME Coins</Text>
-            <Text style={styles.modalCaption}>1 coin = ¥1, paid to the house.</Text>
+            <Text style={styles.modalTitle}>Update UOME Coins</Text>
+            <Text style={styles.modalCaption}>
+              1 coin = ¥1. Raise the amount to buy in, lower it to cash out — cashed-out coins are refunded
+              immediately.
+            </Text>
 
             <View style={styles.amountRow}>
               <View style={styles.currencyBadge}>
@@ -195,20 +204,21 @@ export default function Casino() {
                 placeholder="0"
                 placeholderTextColor={Colors.light.textMuted}
                 keyboardType="numeric"
-                value={buyAmountText}
-                onChangeText={(text) => setBuyAmountText(text.replace(/[^0-9]/g, ''))}
+                value={updateAmountText}
+                onChangeText={(text) => setUpdateAmountText(text.replace(/[^0-9]/g, ''))}
                 autoFocus
+                selectTextOnFocus
               />
             </View>
 
-            {buyError ? <Text style={styles.errorText}>{buyError}</Text> : null}
+            {updateError ? <Text style={styles.errorText}>{updateError}</Text> : null}
 
             <View style={styles.modalActions}>
               <View style={styles.modalActionButton}>
-                <SecondaryButton label="Cancel" onPress={closeBuyModal} disabled={isBuying} />
+                <SecondaryButton label="Cancel" onPress={closeUpdateModal} disabled={isUpdating} />
               </View>
               <View style={styles.modalActionButton}>
-                <PrimaryButton label="Buy" onPress={handleConfirmBuy} loading={isBuying} />
+                <PrimaryButton label="Confirm" onPress={handleConfirmUpdate} loading={isUpdating} />
               </View>
             </View>
           </View>
