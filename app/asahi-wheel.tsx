@@ -1,5 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useAudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,6 +41,10 @@ export default function AsahiWheel() {
     Math.max(MIN_REEL_WIDTH, Math.floor((contentWidth - 20 * 2 - REEL_GAP * (REEL_COUNT - 1)) / REEL_COUNT))
   );
   const reelFontSize = Math.max(18, Math.min(30, Math.round(reelWidth * 0.42)));
+
+  const reelLandPlayer = useAudioPlayer(require('@/assets/sounds/reel-land.wav'));
+  const winPlayer = useAudioPlayer(require('@/assets/sounds/win.wav'));
+  const losePlayer = useAudioPlayer(require('@/assets/sounds/lose.wav'));
 
   const [coinBalance, setCoinBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,10 +90,27 @@ export default function AsahiWheel() {
     if (landedCount < REEL_COUNT || !pendingResult || !user) return;
 
     setRevealedResult(pendingResult);
+    if (pendingResult.multiplier > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      winPlayer.seekTo(0);
+      winPlayer.play();
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      losePlayer.seekTo(0);
+      losePlayer.play();
+    }
     loadBalance(user.id).then(() => setIsSpinning(false));
+    // winPlayer/losePlayer are stable player instances from useAudioPlayer —
+    // including them would retrigger this effect on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landedCount, pendingResult, user, loadBalance]);
 
-  const handleReelLanded = () => setLandedCount((count) => count + 1);
+  const handleReelLanded = () => {
+    setLandedCount((count) => count + 1);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    reelLandPlayer.seekTo(0);
+    reelLandPlayer.play();
+  };
 
   const handleSpin = async () => {
     if (!user || betAmount === null) return;
@@ -97,6 +120,7 @@ export default function AsahiWheel() {
       return;
     }
 
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsSpinning(true);
     setSpinError(null);
     setRevealedResult(null);
