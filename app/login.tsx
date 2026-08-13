@@ -15,6 +15,7 @@ import {
 import { AuthField } from '@/components/auth/field';
 import { PrimaryButton } from '@/components/auth/buttons';
 import { Colors, Fonts } from '@/constants/theme';
+import { useAuthStore } from '@/store/auth-store';
 
 export default function Login() {
   const router = useRouter();
@@ -23,17 +24,17 @@ export default function Login() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  const login = useAuthStore((state) => state.login);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const error = useAuthStore((state) => state.error);
 
   const canSubmit = email.trim().length > 3 && password.length > 0;
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!canSubmit) return;
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      router.replace('/(tabs)');
-    }, 600);
+    const result = await login(email.trim(), password);
+    if (!result.error) router.replace('/(tabs)');
   };
 
   return (
@@ -83,7 +84,9 @@ export default function Login() {
               <Text style={styles.forgotLabel}>Forgot password?</Text>
             </Pressable>
 
-            <PrimaryButton label="Log In" onPress={handleLogin} loading={loading} disabled={!canSubmit} />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <PrimaryButton label="Log In" onPress={handleLogin} loading={isLoading} disabled={!canSubmit} />
           </View>
 
           <View style={styles.footerRow}>
@@ -144,6 +147,11 @@ const styles = StyleSheet.create({
   forgotLabel: {
     color: Colors.light.accent,
     fontSize: 13,
+  },
+  errorText: {
+    color: Colors.light.accent,
+    fontSize: 13,
+    textAlign: 'center',
   },
   footerRow: {
     flexDirection: 'row',

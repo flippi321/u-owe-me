@@ -1,11 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { PrimaryButton } from '@/components/auth/buttons';
 import { AuthField } from '@/components/auth/field';
 import { Colors, Fonts } from '@/constants/theme';
+import { useAuthStore } from '@/store/auth-store';
 
 export default function Register() {
   const router = useRouter();
@@ -16,25 +17,33 @@ export default function Register() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  const register = useAuthStore((state) => state.register);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const error = useAuthStore((state) => state.error);
 
   const canSubmit =
     fullName.trim().length > 1 && username.trim().length > 2 && email.trim().length > 3 && password.length >= 6;
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!canSubmit) return;
-    setLoading(true);
 
-    // Mirrors the `profiles` table: username and full_name; id/avatar_url/created_at are set server-side.
-    const newProfile = {
+    const result = await register({
+      email: email.trim(),
+      password,
+      fullName: fullName.trim(),
       username: username.trim().toLowerCase(),
-      full_name: fullName.trim(),
-    };
+    });
 
-    setTimeout(() => {
-      setLoading(false);
-      router.replace({ pathname: '/(tabs)/profile', params: newProfile });
-    }, 600);
+    if (result.error) return;
+
+    if (result.needsEmailConfirmation) {
+      Alert.alert('Confirm your email', 'We sent you a confirmation link — verify it, then log in.');
+      router.replace('/login');
+      return;
+    }
+
+    router.replace('/(tabs)/profile');
   };
 
   return (
@@ -87,7 +96,9 @@ export default function Register() {
               textContentType="newPassword"
             />
 
-            <PrimaryButton label="Create Account" onPress={handleRegister} loading={loading} disabled={!canSubmit} />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <PrimaryButton label="Create Account" onPress={handleRegister} loading={isLoading} disabled={!canSubmit} />
           </View>
 
           <View style={styles.footerRow}>
@@ -141,6 +152,11 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 16,
+  },
+  errorText: {
+    color: Colors.light.accent,
+    fontSize: 13,
+    textAlign: 'center',
   },
   footerRow: {
     flexDirection: 'row',

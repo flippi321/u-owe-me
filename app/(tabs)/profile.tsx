@@ -1,27 +1,11 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
-
-// Mirrors the `profiles` table.
-type Profile = {
-  id: string;
-  username: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  created_at: string;
-};
-
-const mockProfile: Profile = {
-  id: 'b6a1c2e0-2f3a-4d3b-9c1e-000000000000',
-  username: 'chrisb',
-  full_name: 'Christoffer Brevik',
-  avatar_url: null,
-  created_at: '2025-11-02T09:24:00Z',
-};
+import { useAuthStore } from '@/store/auth-store';
 
 const initialsFrom = (name: string) =>
   name
@@ -33,66 +17,75 @@ const initialsFrom = (name: string) =>
 
 export default function Profile() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ username?: string; full_name?: string; avatar_url?: string }>();
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width - 32, 560);
 
-  const profile: Profile = {
-    ...mockProfile,
-    username: params.username ?? mockProfile.username,
-    full_name: params.full_name ?? mockProfile.full_name,
-    avatar_url: params.avatar_url ?? mockProfile.avatar_url,
+  const profile = useAuthStore((state) => state.profile);
+  const signOut = useAuthStore((state) => state.signOut);
+
+  const memberSince = profile
+    ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : null;
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/');
   };
-
-  const memberSince = new Date(profile.created_at).toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  });
-
-  const handleSignOut = () => router.replace('/');
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.container, { width: contentWidth }]}>
-          <View style={styles.headerPanel}>
-            {profile.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitials}>{initialsFrom(profile.full_name ?? profile.username)}</Text>
+          {profile ? (
+            <>
+              <View style={styles.headerPanel}>
+                {profile.avatar_url ? (
+                  <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatarFallback}>
+                    <Text style={styles.avatarInitials}>{initialsFrom(profile.full_name ?? profile.username)}</Text>
+                  </View>
+                )}
+                <Text style={styles.fullName}>{profile.full_name}</Text>
+                <Text style={styles.username}>@{profile.username}</Text>
+                <Text style={styles.memberSince}>Member since {memberSince}</Text>
               </View>
-            )}
-            <Text style={styles.fullName}>{profile.full_name}</Text>
-            <Text style={styles.username}>@{profile.username}</Text>
-            <Text style={styles.memberSince}>Member since {memberSince}</Text>
-          </View>
 
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Account</Text>
-            <View style={styles.row}>
-              <MaterialCommunityIcons name="account-outline" size={18} color={Colors.light.icon} />
-              <Text style={styles.rowLabel}>Username</Text>
-              <Text style={styles.rowValue}>@{profile.username}</Text>
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Account</Text>
+                <View style={styles.row}>
+                  <MaterialCommunityIcons name="account-outline" size={18} color={Colors.light.icon} />
+                  <Text style={styles.rowLabel}>Username</Text>
+                  <Text style={styles.rowValue}>@{profile.username}</Text>
+                </View>
+                <View style={styles.row}>
+                  <MaterialCommunityIcons name="badge-account-outline" size={18} color={Colors.light.icon} />
+                  <Text style={styles.rowLabel}>Full name</Text>
+                  <Text style={styles.rowValue}>{profile.full_name}</Text>
+                </View>
+                <View style={[styles.row, styles.rowLast]}>
+                  <MaterialCommunityIcons name="calendar-blank-outline" size={18} color={Colors.light.icon} />
+                  <Text style={styles.rowLabel}>Joined</Text>
+                  <Text style={styles.rowValue}>{memberSince}</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <View style={styles.headerPanel}>
+              <View style={styles.avatarFallback}>
+                <MaterialCommunityIcons name="account-outline" size={36} color={Colors.light.accent} />
+              </View>
+              <Text style={styles.fullName}>Guest</Text>
+              <Text style={styles.memberSince}>Sign in with email to save your profile and expenses.</Text>
             </View>
-            <View style={styles.row}>
-              <MaterialCommunityIcons name="badge-account-outline" size={18} color={Colors.light.icon} />
-              <Text style={styles.rowLabel}>Full name</Text>
-              <Text style={styles.rowValue}>{profile.full_name}</Text>
-            </View>
-            <View style={[styles.row, styles.rowLast]}>
-              <MaterialCommunityIcons name="calendar-blank-outline" size={18} color={Colors.light.icon} />
-              <Text style={styles.rowLabel}>Joined</Text>
-              <Text style={styles.rowValue}>{memberSince}</Text>
-            </View>
-          </View>
+          )}
 
           <Pressable
             onPress={handleSignOut}
             style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
             accessibilityRole="button">
             <MaterialCommunityIcons name="logout" size={18} color={Colors.light.accent} />
-            <Text style={styles.signOutLabel}>Sign out</Text>
+            <Text style={styles.signOutLabel}>{profile ? 'Sign out' : 'Back to landing'}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -161,6 +154,7 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     fontSize: 12,
     marginTop: 6,
+    textAlign: 'center',
   },
   panel: {
     borderRadius: 28,

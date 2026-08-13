@@ -1,16 +1,20 @@
-import { Link, useRouter } from 'expo-router';
+import { Link, Redirect, useRouter } from 'expo-router';
 import { SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { Divider, SocialButton } from '@/components/auth/buttons';
 import { BrandMark } from '@/components/brand-mark';
 import { Colors, Fonts } from '@/constants/theme';
+import { useAuthStore } from '@/store/auth-store';
 
 export default function Landing() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width - 48, 420);
+  const session = useAuthStore((state) => state.session);
 
   const continueAsGuest = () => router.replace('/(tabs)');
+
+  if (session) return <Redirect href="/(tabs)" />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
