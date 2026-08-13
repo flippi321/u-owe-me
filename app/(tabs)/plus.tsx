@@ -1,6 +1,6 @@
-import React from 'react';
-import { SafeAreaView, Text, StyleSheet } from 'react-native';
 import { Colors, Fonts } from '@/constants/theme';
+import React from 'react';
+import { SafeAreaView, StyleSheet, Text } from 'react-native';
 
 export default function Plus() {
   return (
