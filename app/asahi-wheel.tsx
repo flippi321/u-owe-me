@@ -1,7 +1,16 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { PrimaryButton } from '@/components/auth/buttons';
 import { SlotReel } from '@/components/casino/reel';
@@ -11,13 +20,25 @@ import { ASAHI_WHEEL_VALUES, playAsahiWheel, type AsahiWheelResult } from '@/uti
 import { fetchCoinBalance } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
 
-const REEL_ROTATIONS = [3, 4, 5];
-const REEL_DURATIONS = [1200, 1850, 2500];
+const REEL_COUNT = 5;
+const REEL_ROTATIONS = [3, 4, 5, 6, 7];
+const REEL_DURATIONS = [1200, 1850, 2500, 3150, 3800];
 const BET_AMOUNTS = [100, 250, 500];
+
+const REEL_GAP = 8;
+const MIN_REEL_WIDTH = 48;
+const MAX_REEL_WIDTH = 72;
 
 export default function AsahiWheel() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const { width: screenWidth } = useWindowDimensions();
+  const contentWidth = Math.min(screenWidth - 32, 420);
+  const reelWidth = Math.min(
+    MAX_REEL_WIDTH,
+    Math.max(MIN_REEL_WIDTH, Math.floor((contentWidth - 20 * 2 - REEL_GAP * (REEL_COUNT - 1)) / REEL_COUNT))
+  );
+  const reelFontSize = Math.max(18, Math.min(30, Math.round(reelWidth * 0.42)));
 
   const [coinBalance, setCoinBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,7 +81,7 @@ export default function AsahiWheel() {
   }, [user, loadBalance]);
 
   useEffect(() => {
-    if (landedCount < 3 || !pendingResult || !user) return;
+    if (landedCount < REEL_COUNT || !pendingResult || !user) return;
 
     setRevealedResult(pendingResult);
     loadBalance(user.id).then(() => setIsSpinning(false));
@@ -158,30 +179,20 @@ export default function AsahiWheel() {
 
               <View style={styles.reelsPanel}>
                 <View style={styles.reelsRow}>
-                  <SlotReel
-                    values={ASAHI_WHEEL_VALUES}
-                    targetValue={pendingResult?.reels[0] ?? null}
-                    spinToken={spinToken}
-                    rotations={REEL_ROTATIONS[0]}
-                    durationMs={REEL_DURATIONS[0]}
-                    onLanded={handleReelLanded}
-                  />
-                  <SlotReel
-                    values={ASAHI_WHEEL_VALUES}
-                    targetValue={pendingResult?.reels[1] ?? null}
-                    spinToken={spinToken}
-                    rotations={REEL_ROTATIONS[1]}
-                    durationMs={REEL_DURATIONS[1]}
-                    onLanded={handleReelLanded}
-                  />
-                  <SlotReel
-                    values={ASAHI_WHEEL_VALUES}
-                    targetValue={pendingResult?.reels[2] ?? null}
-                    spinToken={spinToken}
-                    rotations={REEL_ROTATIONS[2]}
-                    durationMs={REEL_DURATIONS[2]}
-                    onLanded={handleReelLanded}
-                  />
+                  {Array.from({ length: REEL_COUNT }).map((_, i) => (
+                    <SlotReel
+                      key={i}
+                      values={ASAHI_WHEEL_VALUES}
+                      targetValue={pendingResult?.reels[i] ?? null}
+                      spinToken={spinToken}
+                      rotations={REEL_ROTATIONS[i]}
+                      durationMs={REEL_DURATIONS[i]}
+                      onLanded={handleReelLanded}
+                      width={reelWidth}
+                      fontSize={reelFontSize}
+                      isWinning={revealedResult?.winningIndices.includes(i) ?? false}
+                    />
+                  ))}
                 </View>
               </View>
 
@@ -336,7 +347,7 @@ const styles = StyleSheet.create({
   },
   reelsRow: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 8,
     justifyContent: 'center',
   },
   resultWin: {

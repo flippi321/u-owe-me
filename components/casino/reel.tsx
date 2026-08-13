@@ -15,6 +15,7 @@ type SlotReelProps<T> = {
   onLanded?: () => void;
   width?: number;
   fontSize?: number;
+  isWinning?: boolean;
 };
 
 export function SlotReel<T extends string | number>({
@@ -26,6 +27,7 @@ export function SlotReel<T extends string | number>({
   onLanded,
   width = 72,
   fontSize = 30,
+  isWinning = false,
 }: SlotReelProps<T>) {
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -59,7 +61,7 @@ export function SlotReel<T extends string | number>({
   }, [spinToken]);
 
   return (
-    <View style={[styles.window, { width, height: ROW_HEIGHT * VISIBLE_ROWS }]}>
+    <View style={[styles.window, { width, height: ROW_HEIGHT * VISIBLE_ROWS }, isWinning && styles.windowWinning]}>
       <Animated.View style={{ transform: [{ translateY }] }}>
         {strip.map((value, index) => (
           <View key={index} style={styles.row}>
@@ -80,6 +82,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.surfaceAlt,
     borderWidth: 1,
     borderColor: Colors.light.line,
+  },
+  windowWinning: {
+    borderWidth: 2,
+    borderColor: Colors.light.accent,
+    backgroundColor: Colors.light.accentSoft,
   },
   row: {
     height: ROW_HEIGHT,

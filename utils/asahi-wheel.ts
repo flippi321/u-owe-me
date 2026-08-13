@@ -1,9 +1,10 @@
 import { fetchCoinBalance } from './casino';
 import { supabase } from './supabase';
 
-// 9 uniform values per reel, independent draws: P(triple) = 1/81 (~1.2%),
-// P(one adjacent pair) = 16/81 (~19.8%), P(lose) ≈ 79%. Expected return
-// ≈ 71.6% of the bet — a real house edge with frequent small wins.
+// 9 uniform values per reel, independent draws across 5 reels. A win is the
+// longest run of consecutive equal reels anywhere in the line (not just
+// starting from the left): P(2-run) ≈ 34.14%, P(3-run) ≈ 3.17%,
+// P(4-run) ≈ 0.244%, P(5-run) ≈ 0.0152%, P(no win) ≈ 62.43%.
 export const ASAHI_WHEEL_VALUES: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 // Must match the seed row's name in db_structure.sql exactly — its uuid is
@@ -12,24 +13,56 @@ export const ASAHI_WHEEL_GAME_NAME = 'Asahi Wheel';
 
 type Result<T> = { data: T; error: null } | { data: null; error: string };
 
-export type AsahiWheelReels = [number, number, number];
+export type AsahiWheelReels = [number, number, number, number, number];
+
+export type AsahiWheelMultiplier = 0 | 0.6 | 7 | 50 | 500;
 
 export type AsahiWheelResult = {
   reels: AsahiWheelReels;
-  multiplier: 0 | 3 | 10;
+  multiplier: AsahiWheelMultiplier;
+  winningIndices: number[];
   betAmount: number;
   payout: number;
   net: number;
   transactionId: string;
 };
 
-// Position 1&3 matching alone (without 2) is not a win — only checks the
-// two adjacent pairs, per spec.
-export function computeAsahiWheelMultiplier(reels: AsahiWheelReels): 0 | 3 | 10 {
-  const [a, b, c] = reels;
-  if (a === b && b === c) return 10;
-  if (a === b || b === c) return 3;
-  return 0;
+const MULTIPLIER_BY_RUN_LENGTH: Record<number, AsahiWheelMultiplier> = {
+  2: 0.6,
+  3: 7,
+  4: 50,
+  5: 500,
+};
+
+function findRuns(reels: AsahiWheelReels): { start: number; length: number }[] {
+  const runs: { start: number; length: number }[] = [];
+  let start = 0;
+  for (let i = 1; i <= reels.length; i++) {
+    if (i === reels.length || reels[i] !== reels[start]) {
+      runs.push({ start, length: i - start });
+      start = i;
+    }
+  }
+  return runs;
+}
+
+// The payout tier is set by the single longest run anywhere in the line —
+// ties for that length (e.g. two separate pairs) all get highlighted, since
+// they share the same payout tier and hiding one would look like a bug.
+export function computeAsahiWheelOutcome(reels: AsahiWheelReels): {
+  multiplier: AsahiWheelMultiplier;
+  winningIndices: number[];
+} {
+  const runs = findRuns(reels);
+  const maxLength = Math.max(...runs.map((run) => run.length));
+
+  if (maxLength < 2) return { multiplier: 0, winningIndices: [] };
+
+  const winningIndices = runs
+    .filter((run) => run.length === maxLength)
+    .flatMap((run) => Array.from({ length: run.length }, (_, k) => run.start + k));
+
+  return { multiplier: MULTIPLIER_BY_RUN_LENGTH[maxLength], winningIndices };
 }
 
 function rollReel(): number {
@@ -65,9 +98,9 @@ export async function playAsahiWheel(userId: string, betAmount: number): Promise
   if (gameError) return { data: null, error: gameError.message };
   if (!game) return { data: null, error: "Asahi Wheel isn't set up in the database yet." };
 
-  const reels: AsahiWheelReels = [rollReel(), rollReel(), rollReel()];
-  const multiplier = computeAsahiWheelMultiplier(reels);
-  const payout = betAmount * multiplier;
+  const reels: AsahiWheelReels = [rollReel(), rollReel(), rollReel(), rollReel(), rollReel()];
+  const { multiplier, winningIndices } = computeAsahiWheelOutcome(reels);
+  const payout = Math.round(betAmount * multiplier * 100) / 100;
   const net = payout - betAmount;
 
   const { data: transaction, error: insertError } = await supabase
@@ -86,5 +119,8 @@ export async function playAsahiWheel(userId: string, betAmount: number): Promise
     return { data: null, error: insertError?.message ?? 'Could not record the spin.' };
   }
 
-  return { data: { reels, multiplier, betAmount, payout, net, transactionId: transaction.id }, error: null };
+  return {
+    data: { reels, multiplier, winningIndices, betAmount, payout, net, transactionId: transaction.id },
+    error: null,
+  };
 }
