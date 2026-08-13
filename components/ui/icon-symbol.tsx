@@ -23,6 +23,7 @@ const MAPPING = {
   'information.circle': 'info',
   'info-outline': 'info-outline',
   'person.crop.circle': 'account-circle',
+  'exclamationmark.triangle.fill': 'warning',
 } as IconMapping;
 
 /**

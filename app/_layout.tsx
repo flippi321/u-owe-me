@@ -43,6 +43,7 @@ export default function RootLayout() {
 
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="haram" />
         </Stack.Protected>
 
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Details' }} />

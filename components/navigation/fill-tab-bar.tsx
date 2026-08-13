@@ -10,7 +10,7 @@ const TAB_ORDER = [
   { name: 'index', icon: 'house.fill', label: 'Home' },
   { name: 'statistics', icon: 'chart.bar.fill', label: 'Stats' },
   { name: 'plus', icon: 'plus', label: 'Add' },
-  { name: 'about', icon: 'info-outline', label: 'About' },
+  { name: 'special', icon: 'exclamationmark.triangle.fill', label: 'Special' },
   { name: 'profile', icon: 'person.crop.circle', label: 'Profile' },
 ] as const;
 
