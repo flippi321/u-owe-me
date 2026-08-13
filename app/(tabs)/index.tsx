@@ -1,5 +1,16 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { PrimaryButton, SecondaryButton } from '@/components/auth/buttons';
 import { BrandMark } from '@/components/brand-mark';
@@ -22,12 +33,24 @@ export default function HomeScreen() {
   const [owed, setOwed] = useState<BalanceEntry[]>([]);
   const [netBalance, setNetBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const [selectedEntry, setSelectedEntry] = useState<BalanceEntry | null>(null);
   const [isSettling, setIsSettling] = useState(false);
   const [settleError, setSettleError] = useState<string | null>(null);
+
+  const loadBalances = useCallback(async (userId: string) => {
+    const result = await fetchBalances(userId);
+    if (result.error) {
+      setError(result.error);
+    } else if (result.data) {
+      setOwedTo(result.data.owedToMe);
+      setOwed(result.data.iOwe);
+      setNetBalance(result.data.netBalance);
+      setError(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -38,23 +61,21 @@ export default function HomeScreen() {
     let cancelled = false;
     setIsLoading(true);
 
-    fetchBalances(user.id).then((result) => {
-      if (cancelled) return;
-      if (result.error) {
-        setError(result.error);
-      } else if (result.data) {
-        setOwedTo(result.data.owedToMe);
-        setOwed(result.data.iOwe);
-        setNetBalance(result.data.netBalance);
-        setError(null);
-      }
-      setIsLoading(false);
+    loadBalances(user.id).then(() => {
+      if (!cancelled) setIsLoading(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [user, refreshKey]);
+  }, [user, loadBalances]);
+
+  const handleRefresh = async () => {
+    if (!user) return;
+    setIsRefreshing(true);
+    await loadBalances(user.id);
+    setIsRefreshing(false);
+  };
 
   const openSettlePopup = (entry: BalanceEntry) => {
     setSettleError(null);
@@ -73,20 +94,30 @@ export default function HomeScreen() {
 
     const result = await settleUp(user.id, selectedEntry.profile.id);
 
-    setIsSettling(false);
-
     if (result.error) {
+      setIsSettling(false);
       setSettleError(result.error);
       return;
     }
 
     setSelectedEntry(null);
-    setRefreshKey((key) => key + 1);
+    await loadBalances(user.id);
+    setIsSettling(false);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.light.accent}
+            colors={[Colors.light.accent]}
+          />
+        }>
         <View style={[styles.container, { width: contentWidth }]}>
           <View style={styles.logoWrap}>
             <BrandMark />
