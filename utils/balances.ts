@@ -51,30 +51,49 @@ export async function fetchBalances(userId: string): Promise<{ data: Balances | 
     profilesById = Object.fromEntries((profileRows ?? []).map((p) => [p.id, p as Profile]));
   }
 
-  const toEntries = (totals: Totals): BalanceEntry[] =>
-    Array.from(totals.entries())
-      .map(([id, { amount, count }]) => ({ profile: profilesById[id], amount, recordCount: count }))
-      .filter((entry): entry is BalanceEntry => Boolean(entry.profile))
-      .sort((a, b) => b.amount - a.amount);
+  // Net the two directions per counterpart so someone who owes you ¥1000
+  // while you owe them ¥500 shows up once — as ¥500 owed to you — instead
+  // of appearing in both lists at once.
+  const owedToMe: BalanceEntry[] = [];
+  const iOwe: BalanceEntry[] = [];
 
-  const owedToMe = toEntries(owedToMeTotals);
-  const iOwe = toEntries(iOweTotals);
+  for (const id of counterpartIds) {
+    const profile = profilesById[id];
+    if (!profile) continue;
+
+    const owedToMeAmount = owedToMeTotals.get(id)?.amount ?? 0;
+    const iOweAmount = iOweTotals.get(id)?.amount ?? 0;
+    const recordCount = (owedToMeTotals.get(id)?.count ?? 0) + (iOweTotals.get(id)?.count ?? 0);
+    const net = owedToMeAmount - iOweAmount;
+
+    if (net > 0) {
+      owedToMe.push({ profile, amount: net, recordCount });
+    } else if (net < 0) {
+      iOwe.push({ profile, amount: -net, recordCount });
+    }
+  }
+
+  owedToMe.sort((a, b) => b.amount - a.amount);
+  iOwe.sort((a, b) => b.amount - a.amount);
+
   const netBalance =
     owedToMe.reduce((sum, entry) => sum + entry.amount, 0) - iOwe.reduce((sum, entry) => sum + entry.amount, 0);
 
   return { data: { owedToMe, iOwe, netBalance }, error: null };
 }
 
-// Marks every unsettled payment where `creditorId` fronted the money and
-// `debtorId` owes it back as settled. UI-only rounding (nearest ¥100) is
-// never applied here — this clears the exact underlying amounts.
-export async function settleUp(creditorId: string, debtorId: string): Promise<{ error: string | null }> {
+// Marks every unsettled payment between the two users as settled, in both
+// directions at once. This is only ever offered when the net balance is in
+// userId's favor (they're owed more than they owe) — see payment-details.tsx
+// — so a debtor can never unilaterally clear what they owe. UI-only rounding
+// (nearest ¥100) is never applied here — this clears the exact underlying
+// amounts.
+export async function settleUp(userId: string, counterpartId: string): Promise<{ error: string | null }> {
   const { error } = await supabase
     .from('payments')
     .update({ is_settled: true, settled_at: new Date().toISOString() })
-    .eq('paid_by', creditorId)
-    .eq('owed_by', debtorId)
-    .eq('is_settled', false);
+    .eq('is_settled', false)
+    .or(`and(paid_by.eq.${userId},owed_by.eq.${counterpartId}),and(paid_by.eq.${counterpartId},owed_by.eq.${userId})`);
 
   if (error) return { error: error.message };
   return { error: null };

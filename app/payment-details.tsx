@@ -55,7 +55,8 @@ export default function PaymentDetailsScreen() {
     }, [load])
   );
 
-  const total = payments.reduce((sum, p) => sum + p.amount, 0);
+  const signedAmount = (payment: PaymentDetail) => (payment.direction === 'owed_to_me' ? payment.amount : -payment.amount);
+  const netTotal = payments.reduce((sum, p) => sum + signedAmount(p), 0);
 
   const handleSettleAll = async () => {
     if (!user || !counterpartId) return;
@@ -107,14 +108,22 @@ export default function PaymentDetailsScreen() {
           ) : (
             <>
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalAmount}>{formatCurrency(total)}</Text>
+                <Text style={styles.totalLabel}>Net</Text>
+                <Text
+                  style={[
+                    styles.totalAmount,
+                    netTotal > 0 && styles.amountPositive,
+                    netTotal < 0 && styles.amountNegative,
+                  ]}>
+                  {formatCurrency(netTotal, { signDisplay: 'exceptZero' })}
+                </Text>
               </View>
 
               <View style={styles.list}>
                 {payments.map((payment, index) => {
                   const isLast = index === payments.length - 1;
                   const isSplit = payment.amount < payment.recordAmount;
+                  const isPositive = payment.direction === 'owed_to_me';
                   return (
                     <Pressable
                       key={payment.id}
@@ -127,13 +136,14 @@ export default function PaymentDetailsScreen() {
                       accessibilityRole="button">
                       <View style={styles.rowLeft}>
                         <Text style={styles.rowDescription}>{payment.description}</Text>
-                        {isSplit ? (
-                          <Text style={styles.rowNote}>
-                            {formatCurrency(payment.amount)} of {formatCurrency(payment.recordAmount)}
-                          </Text>
-                        ) : null}
+                        <Text style={styles.rowNote}>
+                          {isPositive ? 'owes you' : 'you owe'}
+                          {isSplit ? ` · ${formatCurrency(payment.amount)} of ${formatCurrency(payment.recordAmount)}` : ''}
+                        </Text>
                       </View>
-                      <Text style={styles.rowAmount}>{formatCurrency(payment.amount)}</Text>
+                      <Text style={[styles.rowAmount, isPositive ? styles.amountPositive : styles.amountNegative]}>
+                        {formatCurrency(signedAmount(payment), { signDisplay: 'exceptZero' })}
+                      </Text>
                       <MaterialCommunityIcons name="chevron-right" size={20} color={Colors.light.textMuted} />
                     </Pressable>
                   );
@@ -238,6 +248,12 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     fontFamily: Fonts.serif,
     fontSize: 22,
+  },
+  amountPositive: {
+    color: Colors.light.sage,
+  },
+  amountNegative: {
+    color: Colors.light.accent,
   },
   list: {
     borderRadius: 20,
