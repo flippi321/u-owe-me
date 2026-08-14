@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -14,16 +13,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { PrimaryButton, SecondaryButton } from '@/components/auth/buttons';
 import { BrandMark } from '@/components/brand-mark';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuthStore } from '@/store/auth-store';
-import { fetchBalances, settleUp, type BalanceEntry } from '@/utils/balances';
+import { fetchBalances, type BalanceEntry } from '@/utils/balances';
 import { fetchCoinsOwed } from '@/utils/casino';
 import { formatCurrency } from '@/utils/currency';
-
-// Display-only rounding for the settle-up popup — never written back to the DB.
-const roundToNearestHundred = (amount: number) => Math.round(amount / 100) * 100;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -50,10 +45,6 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [selectedEntry, setSelectedEntry] = useState<BalanceEntry | null>(null);
-  const [isSettling, setIsSettling] = useState(false);
-  const [settleError, setSettleError] = useState<string | null>(null);
 
   const loadBalances = useCallback(async (userId: string) => {
     // Caught here so a rejected fetch (network blip, thrown error) can't
@@ -106,32 +97,15 @@ export default function HomeScreen() {
     setIsRefreshing(false);
   };
 
-  const openSettlePopup = (entry: BalanceEntry) => {
-    setSettleError(null);
-    setSelectedEntry(entry);
-  };
-
-  const closeSettlePopup = () => {
-    if (isSettling) return;
-    setSelectedEntry(null);
-  };
-
-  const handleConfirmPaid = async () => {
-    if (!user || !selectedEntry) return;
-    setIsSettling(true);
-    setSettleError(null);
-
-    const result = await settleUp(user.id, selectedEntry.profile.id);
-
-    if (result.error) {
-      setIsSettling(false);
-      setSettleError(result.error);
-      return;
-    }
-
-    setSelectedEntry(null);
-    await loadBalances(user.id);
-    setIsSettling(false);
+  const openPaymentDetails = (entry: BalanceEntry, direction: 'owed_to_me' | 'i_owe') => {
+    router.push({
+      pathname: '/payment-details',
+      params: {
+        counterpartId: entry.profile.id,
+        counterpartName: entry.profile.full_name ?? entry.profile.username,
+        direction,
+      },
+    });
   };
 
   return (
@@ -206,7 +180,7 @@ export default function HomeScreen() {
                         {owedTo.map((entry) => (
                           <Pressable
                             key={entry.profile.id}
-                            onPress={() => openSettlePopup(entry)}
+                            onPress={() => openPaymentDetails(entry, 'owed_to_me')}
                             accessibilityRole="button"
                             style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
                             <View style={styles.rowLeft}>
@@ -237,19 +211,27 @@ export default function HomeScreen() {
                               <Text style={styles.rowName}>Asahi Fund</Text>
                               <Text style={styles.rowNote}>UOME Coins bought</Text>
                             </View>
-                            <Text style={styles.rowAmount}>{formatCurrency(asahiFundOwed)}</Text>
+                            <Text style={[styles.rowAmount, styles.rowAmountNegative]}>
+                              {formatCurrency(asahiFundOwed)}
+                            </Text>
                           </Pressable>
                         ) : null}
                         {owed.map((entry) => (
-                          <View key={entry.profile.id} style={styles.row}>
+                          <Pressable
+                            key={entry.profile.id}
+                            onPress={() => openPaymentDetails(entry, 'i_owe')}
+                            accessibilityRole="button"
+                            style={({ pressed }) => [styles.row, styles.rowPressable, pressed && styles.rowPressed]}>
                             <View style={styles.rowLeft}>
                               <Text style={styles.rowName}>{entry.profile.full_name ?? entry.profile.username}</Text>
                               <Text style={styles.rowNote}>
                                 {entry.recordCount} unsettled {entry.recordCount === 1 ? 'expense' : 'expenses'}
                               </Text>
                             </View>
-                            <Text style={styles.rowAmount}>{formatCurrency(entry.amount)}</Text>
-                          </View>
+                            <Text style={[styles.rowAmount, styles.rowAmountNegative]}>
+                              {formatCurrency(entry.amount)}
+                            </Text>
+                          </Pressable>
                         ))}
                       </View>
                     )}
@@ -260,40 +242,6 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
-
-      <Modal
-        visible={selectedEntry !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={closeSettlePopup}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { width: Math.min(width - 48, 420) }]}>
-            {selectedEntry ? (
-              <>
-                <Text style={styles.modalTitle}>
-                  {selectedEntry.profile.full_name ?? selectedEntry.profile.username} owes you
-                </Text>
-                <Text style={styles.modalAmount}>{formatCurrency(roundToNearestHundred(selectedEntry.amount))}</Text>
-                <Text style={styles.modalCaption}>
-                  {selectedEntry.recordCount} unsettled {selectedEntry.recordCount === 1 ? 'expense' : 'expenses'} ·
-                  rounded to the nearest ¥100
-                </Text>
-
-                {settleError ? <Text style={styles.errorText}>{settleError}</Text> : null}
-
-                <View style={styles.modalActions}>
-                  <View style={styles.modalActionButton}>
-                    <SecondaryButton label="Cancel" onPress={closeSettlePopup} disabled={isSettling} />
-                  </View>
-                  <View style={styles.modalActionButton}>
-                    <PrimaryButton label="It's paid" onPress={handleConfirmPaid} loading={isSettling} />
-                  </View>
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -425,6 +373,9 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.serif,
     fontSize: 16,
   },
+  rowAmountNegative: {
+    color: Colors.light.accent,
+  },
   rowPressable: {
     marginHorizontal: -8,
     paddingHorizontal: 8,
@@ -432,45 +383,5 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: Colors.light.surfaceAlt,
-  },
-  modalOverlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(23, 17, 15, 0.5)',
-    padding: 24,
-  },
-  modalCard: {
-    borderRadius: 24,
-    padding: 24,
-    gap: 8,
-    backgroundColor: Colors.light.surface,
-    borderWidth: 1,
-    borderColor: Colors.light.line,
-  },
-  modalTitle: {
-    color: Colors.light.text,
-    fontFamily: Fonts.serif,
-    fontSize: 18,
-  },
-  modalAmount: {
-    color: Colors.light.sage,
-    fontFamily: Fonts.serif,
-    fontSize: 36,
-    marginTop: 4,
-  },
-  modalCaption: {
-    color: Colors.light.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 8,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalActionButton: {
-    flex: 1,
   },
 });
