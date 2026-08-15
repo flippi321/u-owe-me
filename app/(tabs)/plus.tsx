@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -225,6 +226,22 @@ export default function Plus() {
     0
   );
   const remaining = Number(amount) - specificSum;
+
+  const equalShares =
+    mode === 'equal' && selected.size > 0 && Number(amount) > 0
+      ? computeEqualShares(Number(amount), Array.from(selected), paidBy ?? '', people)
+      : {};
+
+  const allSelected = people.length > 0 && selected.size === people.length;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+      setSpecificAmounts({});
+    } else {
+      setSelected(new Set(people.map((person) => person.id)));
+    }
+  };
 
   const handleFinish = async () => {
     if (!currentUser || !paidBy || selected.size === 0 || isSubmitting || mode === 'english-spanish') return;
@@ -548,33 +565,38 @@ export default function Plus() {
               </>
             ) : (
               <>
-                <View style={styles.segmentedControl}>
-                  <Pressable
-                    onPress={() => setMode('equal')}
-                    style={[styles.segmentedOption, mode === 'equal' && styles.segmentedOptionActive]}>
-                    <Text
-                      style={[styles.segmentedOptionLabel, mode === 'equal' && styles.segmentedOptionLabelActive]}>
-                      Equal split
+                <Pressable
+                  onPress={() => setMode(mode === 'specific' ? 'equal' : 'specific')}
+                  style={styles.specificToggleRow}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: mode === 'specific' }}>
+                  <View style={styles.specificToggleText}>
+                    <Text style={styles.specificToggleLabel}>Specific amounts</Text>
+                    <Text style={styles.specificToggleCaption}>
+                      {mode === 'specific'
+                        ? 'Enter exact amounts per person below.'
+                        : "Off — everyone's share is split equally."}
                     </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setMode('specific')}
-                    style={[styles.segmentedOption, mode === 'specific' && styles.segmentedOptionActive]}>
-                    <Text
-                      style={[
-                        styles.segmentedOptionLabel,
-                        mode === 'specific' && styles.segmentedOptionLabelActive,
-                      ]}>
-                      Specific amounts
-                    </Text>
-                  </Pressable>
-                </View>
+                  </View>
+                  <Switch
+                    value={mode === 'specific'}
+                    onValueChange={(value) => setMode(value ? 'specific' : 'equal')}
+                    trackColor={{ false: Colors.light.line, true: Colors.light.accent }}
+                    thumbColor={Colors.light.surface}
+                    ios_backgroundColor={Colors.light.line}
+                  />
+                </Pressable>
 
                   <View style={styles.splitHeader}>
                     <Text style={styles.splitTitle}>Split with</Text>
-                    <Text style={styles.splitCount}>
-                      {selected.size} of {people.length} selected
-                    </Text>
+                    <View style={styles.splitHeaderRight}>
+                      <Text style={styles.splitCount}>
+                        {selected.size} of {people.length} selected
+                      </Text>
+                      <Pressable onPress={toggleSelectAll} hitSlop={8} accessibilityRole="button">
+                        <Text style={styles.selectAllLink}>{allSelected ? 'Clear all' : 'Select all'}</Text>
+                      </Pressable>
+                    </View>
                   </View>
 
                   <View style={styles.peopleList}>
@@ -597,7 +619,7 @@ export default function Plus() {
                             <Text style={styles.avatarText}>{initialsFrom(nameFor(person))}</Text>
                           </View>
                           <Text style={styles.personName}>{nameFor(person)}</Text>
-                          {mode === 'specific' && isSelected ? (
+                          {isSelected && mode === 'specific' ? (
                             <TextInput
                               style={styles.specificAmountInput}
                               placeholder="0"
@@ -608,6 +630,10 @@ export default function Plus() {
                                 setSpecificAmounts((prev) => ({ ...prev, [person.id]: text.replace(/[^0-9]/g, '') }))
                               }
                             />
+                          ) : isSelected && mode === 'equal' ? (
+                            <Text style={styles.equalAmountDisplay} numberOfLines={1}>
+                              {formatCurrency(equalShares[person.id] ?? 0)}
+                            </Text>
                           ) : null}
                           <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
                             {isSelected ? (
@@ -892,31 +918,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
-  segmentedControl: {
+  specificToggleRow: {
     flexDirection: 'row',
-    borderRadius: 16,
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 20,
     backgroundColor: Colors.light.surface,
     borderWidth: 1,
     borderColor: Colors.light.line,
-    padding: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  segmentedOption: {
+  specificToggleText: {
     flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 12,
+    gap: 2,
   },
-  segmentedOptionActive: {
-    backgroundColor: Colors.light.text,
+  specificToggleLabel: {
+    color: Colors.light.text,
+    fontFamily: Fonts.serif,
+    fontSize: 16,
   },
-  segmentedOptionLabel: {
+  specificToggleCaption: {
     color: Colors.light.textMuted,
     fontSize: 12,
-    fontFamily: Fonts.serif,
-    textAlign: 'center',
-  },
-  segmentedOptionLabelActive: {
-    color: Colors.light.surface,
   },
   splitHeader: {
     flexDirection: 'row',
@@ -928,9 +952,19 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.serif,
     fontSize: 20,
   },
+  splitHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   splitCount: {
     color: Colors.light.textMuted,
     fontSize: 12,
+  },
+  selectAllLink: {
+    color: Colors.light.accent,
+    fontSize: 12,
+    fontFamily: Fonts.serif,
   },
   statusPanel: {
     borderRadius: 20,
@@ -1003,6 +1037,19 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     paddingVertical: 6,
     paddingHorizontal: 8,
+  },
+  equalAmountDisplay: {
+    width: 72,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.light.line,
+    backgroundColor: Colors.light.surfaceAlt,
+    textAlign: 'right',
+    fontSize: 14,
+    color: Colors.light.textMuted,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    opacity: 0.7,
   },
   checkbox: {
     width: 24,
