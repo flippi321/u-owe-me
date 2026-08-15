@@ -223,6 +223,20 @@ export default function Casino() {
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
               </Pressable>
+
+              <Pressable
+                onPress={() => router.push('/house-management')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.gameRow, pressed && styles.gameRowPressed]}>
+                <View style={styles.gameIconWrap}>
+                  <MaterialCommunityIcons name="bank" size={22} color={Colors.light.accent} />
+                </View>
+                <View style={styles.gameRowText}>
+                  <Text style={styles.gameTitle}>House Management</Text>
+                  <Text style={styles.gameSubtitle}>Manage the house&apos;s books</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.light.textMuted} />
+              </Pressable>
             </>
           )}
         </View>

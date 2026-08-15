@@ -48,6 +48,7 @@ export default function RootLayout() {
           <Stack.Screen name="coin-flip" />
           <Stack.Screen name="ladder" />
           <Stack.Screen name="blackjack" />
+          <Stack.Screen name="house-management" />
         </Stack.Protected>
 
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Details' }} />
