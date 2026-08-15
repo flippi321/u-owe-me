@@ -1,4 +1,6 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,12 +22,14 @@ export function FillTabBar({ state, navigation }: BottomTabBarProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const router = useRouter();
 
   const palette = Colors[colorScheme];
   const iconSize = clamp(Math.round(width / 15.5), 22, 34);
   const centerIconSize = clamp(Math.round(iconSize * 1.1), 24, 38);
   const barHeight = clamp(Math.round(width / 6), 84, 132);
   const centerSize = clamp(Math.round(width / 5.0), 64, 108);
+  const satelliteSize = clamp(Math.round(centerSize * 0.42), 26, 40);
   const sideSpacing = clamp(Math.round(width / 70), 8, 18);
   const verticalPadding = clamp(Math.round(width / 120), 4, 10);
 
@@ -59,17 +63,40 @@ export function FillTabBar({ state, navigation }: BottomTabBarProps) {
               accessibilityRole="button"
               accessibilityLabel={tab.label}>
               {isCenter ? (
-                <View
-                  style={[
-                    styles.centerButton,
-                    {
-                      width: centerSize,
-                      height: centerSize,
-                      borderRadius: centerSize / 2,
-                      backgroundColor: palette.accent,
-                    },
-                  ]}>
-                  <IconSymbol name={icon as never} size={centerIconSize} color="#fff" />
+                <View style={styles.centerWrap}>
+                  <View
+                    style={[
+                      styles.centerButton,
+                      {
+                        width: centerSize,
+                        height: centerSize,
+                        borderRadius: centerSize / 2,
+                        backgroundColor: palette.accent,
+                      },
+                    ]}>
+                    <IconSymbol name={icon as never} size={centerIconSize} color="#fff" />
+                  </View>
+
+                  <Pressable
+                    onPress={() => router.push('/quick-add')}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Quick add"
+                    style={({ pressed }) => [
+                      styles.satelliteButton,
+                      {
+                        width: satelliteSize,
+                        height: satelliteSize,
+                        borderRadius: satelliteSize / 2,
+                        top: -satelliteSize / 3,
+                        right: -satelliteSize / 4,
+                        backgroundColor: palette.surface,
+                        borderColor: palette.accent,
+                      },
+                      pressed && styles.pressed,
+                    ]}>
+                    <MaterialCommunityIcons name="flash" size={Math.round(satelliteSize * 0.55)} color={palette.accent} />
+                  </Pressable>
                 </View>
               ) : (
                 <View style={styles.iconStack}>
@@ -123,6 +150,12 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.78,
   },
+  centerWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -12,
+  },
   centerButton: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -131,6 +164,16 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 10 },
     elevation: 8,
-    marginTop: -12,
+  },
+  satelliteButton: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
 });

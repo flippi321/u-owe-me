@@ -28,34 +28,16 @@ import { fetchAllProfiles } from '@/utils/profiles';
 import { formatCurrency } from '@/utils/currency';
 import { initialsFrom } from '@/utils/format';
 import { submitRecord } from '@/utils/records';
+import { computeEqualShares } from '@/utils/split';
 
 type SplitMode = 'equal' | 'specific' | 'english-spanish';
 
 type GameCaller = 'you' | 'them';
 
+const TAX_RATE = 0.1;
+
 const REEL_ROTATIONS = 12;
 const REEL_DURATION_MS = 3200;
-
-function computeEqualShares(
-  total: number,
-  participantIds: string[],
-  payerId: string,
-  orderedPeople: Profile[]
-): Record<string, number> {
-  const n = participantIds.length;
-  const base = Math.floor(total / n);
-  const remainder = total - base * n;
-
-  const shares: Record<string, number> = {};
-  for (const id of participantIds) shares[id] = base;
-
-  const remainderTarget = participantIds.includes(payerId)
-    ? payerId
-    : (orderedPeople.find((p) => participantIds.includes(p.id))?.id ?? participantIds[0]);
-
-  shares[remainderTarget] += remainder;
-  return shares;
-}
 
 function computeSpecificShares(participantIds: string[], specificAmounts: Record<string, string>): Record<string, number> {
   const shares: Record<string, number> = {};
@@ -91,6 +73,7 @@ export default function Plus() {
   const [payerPickerOpen, setPayerPickerOpen] = useState(false);
   const [mode, setMode] = useState<SplitMode>('equal');
   const [specificAmounts, setSpecificAmounts] = useState<Record<string, string>>({});
+  const [taxEnabled, setTaxEnabled] = useState(false);
   const [opponentId, setOpponentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +168,7 @@ export default function Plus() {
     setPayerPickerOpen(false);
     setMode('equal');
     setSpecificAmounts({});
+    setTaxEnabled(false);
     setOpponentId(null);
     setSubmitError(null);
     setGameCaller(null);
@@ -220,6 +204,11 @@ export default function Plus() {
     setOpponentId(null);
     setStep(2);
   };
+
+  // Tax is applied per person, not to the overall bill — the total you type
+  // stays what it is, and each person's own share (equal or specific) is
+  // individually bumped 10% at the end, shown as a small hint under their box.
+  const applyTax = (value: number) => Math.round(value * (1 + TAX_RATE));
 
   const specificSum = Object.values(computeSpecificShares(Array.from(selected), specificAmounts)).reduce(
     (sum, value) => sum + value,
@@ -264,6 +253,13 @@ export default function Plus() {
       }
 
       perPersonAmounts = specificShares;
+    }
+
+    if (taxEnabled) {
+      perPersonAmounts = Object.fromEntries(
+        Object.entries(perPersonAmounts).map(([id, share]) => [id, applyTax(share)])
+      );
+      finalAmount = Object.values(perPersonAmounts).reduce((sum, share) => sum + share, 0);
     }
 
     setSubmitError(null);
@@ -438,6 +434,26 @@ export default function Plus() {
                 />
               </View>
 
+              <Pressable
+                onPress={() => setTaxEnabled((prev) => !prev)}
+                style={styles.toggleRow}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: taxEnabled }}>
+                <View style={styles.toggleText}>
+                  <Text style={styles.toggleLabel}>Add 10% tax</Text>
+                  <Text style={styles.toggleCaption}>
+                    {taxEnabled ? "On — added to each person's share." : 'Off — no tax added.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={taxEnabled}
+                  onValueChange={setTaxEnabled}
+                  trackColor={{ false: Colors.light.line, true: Colors.light.accent }}
+                  thumbColor={Colors.light.surface}
+                  ios_backgroundColor={Colors.light.line}
+                />
+              </Pressable>
+
               <View style={styles.payerSection}>
                 <Text style={styles.payerLabel}>Paid by</Text>
 
@@ -566,13 +582,33 @@ export default function Plus() {
             ) : (
               <>
                 <Pressable
+                  onPress={() => setTaxEnabled((prev) => !prev)}
+                  style={styles.toggleRow}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: taxEnabled }}>
+                  <View style={styles.toggleText}>
+                    <Text style={styles.toggleLabel}>Add 10% tax</Text>
+                    <Text style={styles.toggleCaption}>
+                      {taxEnabled ? "On — added to each person's share." : 'Off — no tax added.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={taxEnabled}
+                    onValueChange={setTaxEnabled}
+                    trackColor={{ false: Colors.light.line, true: Colors.light.accent }}
+                    thumbColor={Colors.light.surface}
+                    ios_backgroundColor={Colors.light.line}
+                  />
+                </Pressable>
+
+                <Pressable
                   onPress={() => setMode(mode === 'specific' ? 'equal' : 'specific')}
-                  style={styles.specificToggleRow}
+                  style={styles.toggleRow}
                   accessibilityRole="switch"
                   accessibilityState={{ checked: mode === 'specific' }}>
-                  <View style={styles.specificToggleText}>
-                    <Text style={styles.specificToggleLabel}>Specific amounts</Text>
-                    <Text style={styles.specificToggleCaption}>
+                  <View style={styles.toggleText}>
+                    <Text style={styles.toggleLabel}>Specific amounts</Text>
+                    <Text style={styles.toggleCaption}>
                       {mode === 'specific'
                         ? 'Enter exact amounts per person below.'
                         : "Off — everyone's share is split equally."}
@@ -605,42 +641,62 @@ export default function Plus() {
                       const isLast = index === people.length - 1;
 
                       return (
-                        <Pressable
-                          key={person.id}
-                          onPress={() => toggle(person.id)}
-                          style={({ pressed }) => [
-                            styles.personRow,
-                            isLast && styles.personRowLast,
-                            pressed && styles.personRowPressed,
-                          ]}
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked: isSelected }}>
-                          <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{initialsFrom(nameFor(person))}</Text>
-                          </View>
-                          <Text style={styles.personName}>{nameFor(person)}</Text>
+                        <View key={person.id} style={[styles.personRow, isLast && styles.personRowLast]}>
+                          <Pressable
+                            onPress={() => toggle(person.id)}
+                            style={({ pressed }) => [styles.personRowTapZone, pressed && styles.personRowPressed]}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: isSelected }}>
+                            <View style={styles.avatar}>
+                              <Text style={styles.avatarText}>{initialsFrom(nameFor(person))}</Text>
+                            </View>
+                            <Text style={styles.personName}>{nameFor(person)}</Text>
+                          </Pressable>
                           {isSelected && mode === 'specific' ? (
-                            <TextInput
-                              style={styles.specificAmountInput}
-                              placeholder="0"
-                              placeholderTextColor={Colors.light.textMuted}
-                              keyboardType="numeric"
-                              value={specificAmounts[person.id] ?? ''}
-                              onChangeText={(text) =>
-                                setSpecificAmounts((prev) => ({ ...prev, [person.id]: text.replace(/[^0-9]/g, '') }))
-                              }
-                            />
+                            <View style={styles.amountWithTax}>
+                              <TextInput
+                                style={styles.specificAmountInput}
+                                placeholder="0"
+                                placeholderTextColor={Colors.light.textMuted}
+                                keyboardType="numeric"
+                                value={specificAmounts[person.id] ?? ''}
+                                onChangeText={(text) =>
+                                  setSpecificAmounts((prev) => ({
+                                    ...prev,
+                                    [person.id]: text.replace(/[^0-9]/g, ''),
+                                  }))
+                                }
+                              />
+                              {taxEnabled && Number(specificAmounts[person.id]) > 0 ? (
+                                <Text style={styles.taxHint} numberOfLines={1}>
+                                  +10%: {formatCurrency(applyTax(Number(specificAmounts[person.id])))}
+                                </Text>
+                              ) : null}
+                            </View>
                           ) : isSelected && mode === 'equal' ? (
-                            <Text style={styles.equalAmountDisplay} numberOfLines={1}>
-                              {formatCurrency(equalShares[person.id] ?? 0)}
-                            </Text>
+                            <View style={styles.amountWithTax}>
+                              <Text style={styles.equalAmountDisplay} numberOfLines={1}>
+                                {formatCurrency(equalShares[person.id] ?? 0)}
+                              </Text>
+                              {taxEnabled ? (
+                                <Text style={styles.taxHint} numberOfLines={1}>
+                                  +10%: {formatCurrency(applyTax(equalShares[person.id] ?? 0))}
+                                </Text>
+                              ) : null}
+                            </View>
                           ) : null}
-                          <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
-                            {isSelected ? (
-                              <MaterialCommunityIcons name="check" size={14} color={Colors.light.surface} />
-                            ) : null}
-                          </View>
-                        </Pressable>
+                          <Pressable
+                            onPress={() => toggle(person.id)}
+                            hitSlop={8}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: isSelected }}>
+                            <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                              {isSelected ? (
+                                <MaterialCommunityIcons name="check" size={14} color={Colors.light.surface} />
+                              ) : null}
+                            </View>
+                          </Pressable>
+                        </View>
                       );
                     })}
 
@@ -918,7 +974,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
-  specificToggleRow: {
+  toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -929,16 +985,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  specificToggleText: {
+  toggleText: {
     flex: 1,
     gap: 2,
   },
-  specificToggleLabel: {
+  toggleLabel: {
     color: Colors.light.text,
     fontFamily: Fonts.serif,
     fontSize: 16,
   },
-  specificToggleCaption: {
+  toggleCaption: {
     color: Colors.light.textMuted,
     fontSize: 12,
   },
@@ -1003,6 +1059,12 @@ const styles = StyleSheet.create({
   personRowLast: {
     borderBottomWidth: 0,
   },
+  personRowTapZone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
   personRowPressed: {
     opacity: 0.7,
   },
@@ -1025,6 +1087,14 @@ const styles = StyleSheet.create({
     flex: 1,
     color: Colors.light.text,
     fontSize: 15,
+  },
+  amountWithTax: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  taxHint: {
+    color: Colors.light.textMuted,
+    fontSize: 11,
   },
   specificAmountInput: {
     width: 72,
